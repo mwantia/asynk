@@ -1,4 +1,4 @@
-package task
+package shared
 
 type Status string
 
