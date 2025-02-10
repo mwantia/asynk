@@ -1,13 +1,5 @@
 version: '3'
 
-env:
-  BUILD_PATH: ./build/queueverse
-  DOCKER_REGISTRY: registry.wantia.app
-  DOCKER_IMAGE: mwantia/queueverse
-  DOCKER_VERSION: v0.1.2
-  DOCKER_LATEST: alpha
-  DOCKER_PLATFORMS: linux/amd64,linux/arm64
-
 tasks:
   setup:
     cmds:

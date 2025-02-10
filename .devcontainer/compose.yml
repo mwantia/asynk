@@ -2,11 +2,11 @@ services:
   devcontainer:
     build: .
     environment:
-      - KAFKA_BROKERS=kafka:9092
+      KAFKA_BROKERS: kafka:9092
   kafka:
     image: confluentinc/cp-kafka:7.8.0
     ports:
-      - "29092:29092"
+      - 29092:29092
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_NODE_ID: 1
@@ -24,3 +24,10 @@ services:
       KAFKA_METADATA_MAX_RETENTION_MS: 60000
       KAFKA_METADATA_LOG_MAX_RECORD_BYTES_BETWEEN_SNAPSHOTS: 2800
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+  kafdrop:
+    image: obsidiandynamics/kafdrop:latest
+    environment:
+      KAFKA_BROKERCONNECT: kafka:9092
+    depends_on:
+      - kafka
+    
