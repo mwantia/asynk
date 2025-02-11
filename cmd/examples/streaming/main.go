@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/mwantia/asynk/pkg/client"
-	"github.com/mwantia/asynk/pkg/options"
-	"github.com/mwantia/asynk/pkg/shared"
+	"github.com/mwantia/asynk/pkg/event"
+	"github.com/mwantia/asynk/pkg/kafka"
 )
 
 const (
@@ -19,8 +19,8 @@ type MockData struct {
 
 func main() {
 	c, err := client.New(
-		options.WithBrokers("kafka:9092"),
-		options.WithPool("debug"),
+		kafka.WithBrokers("kafka:9092"),
+		kafka.WithPool("debug"),
 	)
 	if err != nil {
 		panic(err)
@@ -28,20 +28,20 @@ func main() {
 
 	defer c.Close()
 
-	task, err := shared.NewTask(MockData{
-		Content: "Hello World",
-	})
-	if err != nil {
-		panic(err)
-	}
+	te, _ := event.NewTaskEvent(
+		event.WithUUIDv7(),
+		event.WithMarshal(MockData{
+			Content: "Hello World",
+		}),
+	)
 
-	streams, err := c.Submit(context.Background(), task)
+	streams, err := c.Submit(context.Background(), te)
 	if err != nil {
 		panic(err)
 	}
 
 	for stream := range streams {
-		fmt.Printf("Task: %s: Status = '%s'\n", stream.Task, stream.Status)
+		fmt.Printf("Task: %s: Status = '%s'\n", stream.ID, stream.Status)
 		if stream.Status.IsTerminal() {
 			break
 		}

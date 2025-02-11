@@ -6,7 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/mwantia/asynk/pkg/shared"
+	"github.com/mwantia/asynk/pkg/event"
+	"github.com/mwantia/asynk/pkg/kafka"
 )
 
 type ServeMux struct {
@@ -48,7 +49,7 @@ func (mux *ServeMux) Handle(topic string, handler Handler) error {
 	return nil
 }
 
-func (mux *ServeMux) HandleFunc(topic string, handler func(context.Context, *shared.Task) error) error {
+func (mux *ServeMux) HandleFunc(topic string, handler func(context.Context, *kafka.Client, *event.TaskEvent) error) error {
 	if handler == nil {
 		return fmt.Errorf("invalid handler")
 	}
@@ -56,13 +57,13 @@ func (mux *ServeMux) HandleFunc(topic string, handler func(context.Context, *sha
 	return mux.Handle(topic, HandlerFunc(handler))
 }
 
-func (mux *ServeMux) ProcessTask(ctx context.Context, task *shared.Task) error {
+func (mux *ServeMux) ProcessTask(ctx context.Context, c *kafka.Client, t *event.TaskEvent) error {
 	mux.mutex.RLock()
 	defer mux.mutex.RUnlock()
 
 	handler, exist := mux.handlers[""]
 	if exist {
-		return handler.handler.ProcessTask(ctx, task)
+		return handler.handler.ProcessTask(ctx, c, t)
 	}
 
 	return fmt.Errorf("topic not found")

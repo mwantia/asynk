@@ -7,8 +7,8 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/mwantia/asynk/pkg/options"
-	"github.com/mwantia/asynk/pkg/shared"
+	"github.com/mwantia/asynk/pkg/event"
+	"github.com/mwantia/asynk/pkg/kafka"
 	"github.com/mwantia/asynk/pkg/worker"
 )
 
@@ -24,10 +24,11 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	w, err := worker.NewWorker(
-		options.WithBrokers("kafka:9092"),
-		options.WithPool("debug"),
-		options.WithGroupID("group1"),
+	w, err := worker.New(
+		kafka.WithBrokers("kafka-proxy.ingress.consul:29090"),
+		kafka.WithTopicPrefix("asynk"),
+		kafka.WithPool("debug"),
+		kafka.WithGroupID("group1"),
 	)
 	if err != nil {
 		panic(err)
@@ -35,20 +36,23 @@ func main() {
 
 	log.Println("Running worker...")
 
-	if err := w.RunHandlerFunc(ctx, MockTopic, HandleMock); err != nil {
+	mux := worker.NewServeMux()
+	mux.HandleFunc(MockTopic, HandleMock)
+
+	if err := w.Run(ctx, mux); err != nil {
 		panic(err)
 	}
 
 	log.Println("Worker cleanup completed...")
 }
 
-func HandleMock(ctx context.Context, task *shared.Task) error {
+func HandleMock(ctx context.Context, c *kafka.Client, te *event.TaskEvent) error {
 	var data MockData
-	if err := json.Unmarshal(task.Payload, &data); err != nil {
+	if err := json.Unmarshal(te.Payload, &data); err != nil {
 		return err
 	}
 
-	log.Println(task.ID)
+	log.Println(te.ID)
 	log.Println(data.Content)
 
 	return nil

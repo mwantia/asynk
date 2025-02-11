@@ -6,24 +6,22 @@ import (
 	"log"
 	"sync"
 
-	"github.com/mwantia/asynk/internal/kafka"
-	"github.com/mwantia/asynk/pkg/options"
-	"github.com/mwantia/asynk/pkg/shared"
+	"github.com/mwantia/asynk/pkg/kafka"
 )
 
 type Worker struct {
-	mutex   sync.RWMutex
-	options options.Options
+	mutex  sync.RWMutex
+	client *kafka.Client
 }
 
-func NewWorker(opts ...options.Option) (*Worker, error) {
-	options := options.DefaultOptions()
-	for _, opt := range opts {
-		opt(&options)
+func New(opts ...kafka.Option) (*Worker, error) {
+	client, err := kafka.New(opts...)
+	if err != nil {
+		return nil, err
 	}
 
 	return &Worker{
-		options: options,
+		client: client,
 	}, nil
 }
 
@@ -38,13 +36,7 @@ func (w *Worker) Run(ctx context.Context, mux *ServeMux) error {
 		go func() {
 			defer wg.Done()
 
-			topic := fmt.Sprintf("%s.%s.%s", w.options.Prefix, w.options.Pool, suffix)
-			r, err := kafka.NewReader(w.options.Brokers, topic, w.options.GroupID)
-			if err != nil {
-				errs = append(errs, err)
-				return
-			}
-
+			r := w.client.NewReader(suffix)
 			cleanups = append(cleanups, r.Close)
 
 			for {
@@ -52,13 +44,13 @@ func (w *Worker) Run(ctx context.Context, mux *ServeMux) error {
 				case <-ctx.Done():
 					return
 				default:
-					var task shared.Task
-					if err := r.ReadJSON(ctx, &task); err != nil {
+					task, err := r.ReadTask(ctx)
+					if err != nil {
 						log.Println(err)
 						continue
 					}
 
-					if err := handler.handler.ProcessTask(ctx, &task); err != nil {
+					if err := handler.handler.ProcessTask(ctx, w.client, task); err != nil {
 						log.Println(err)
 						continue
 					}
@@ -82,22 +74,4 @@ func (w *Worker) Run(ctx context.Context, mux *ServeMux) error {
 	}
 
 	return nil
-}
-
-func (w *Worker) RunHandler(ctx context.Context, topic string, handler Handler) error {
-	mux := NewServeMux()
-	if err := mux.Handle(topic, handler); err != nil {
-		return fmt.Errorf("failed to create mux: %w", err)
-	}
-
-	return w.Run(ctx, mux)
-}
-
-func (w *Worker) RunHandlerFunc(ctx context.Context, topic string, fn HandlerFunc) error {
-	mux := NewServeMux()
-	if err := mux.HandleFunc(topic, fn); err != nil {
-		return fmt.Errorf("failed to create mux: %w", err)
-	}
-
-	return w.Run(ctx, mux)
 }

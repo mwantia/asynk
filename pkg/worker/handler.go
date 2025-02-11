@@ -3,15 +3,16 @@ package worker
 import (
 	"context"
 
-	"github.com/mwantia/asynk/pkg/shared"
+	"github.com/mwantia/asynk/pkg/event"
+	"github.com/mwantia/asynk/pkg/kafka"
 )
 
 type Handler interface {
-	ProcessTask(context.Context, *shared.Task) error
+	ProcessTask(context.Context, *kafka.Client, *event.TaskEvent) error
 }
 
-type HandlerFunc func(context.Context, *shared.Task) error
+type HandlerFunc func(context.Context, *kafka.Client, *event.TaskEvent) error
 
-func (fn HandlerFunc) ProcessTask(ctx context.Context, task *shared.Task) error {
-	return fn(ctx, task)
+func (fn HandlerFunc) ProcessTask(ctx context.Context, c *kafka.Client, t *event.TaskEvent) error {
+	return fn(ctx, c, t)
 }

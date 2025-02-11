@@ -5,77 +5,59 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/mwantia/asynk/internal/kafka"
-	"github.com/mwantia/asynk/pkg/options"
-	"github.com/mwantia/asynk/pkg/shared"
+	"github.com/mwantia/asynk/pkg/event"
+	"github.com/mwantia/asynk/pkg/kafka"
 )
 
 type Client struct {
 	writer  *kafka.Writer
 	reader  *kafka.Reader
-	streams map[string]chan shared.Stream
-	channel chan shared.Stream
+	streams map[string]chan event.TaskEvent
+	channel chan event.TaskEvent
 	mutex   sync.RWMutex
-	options options.Options
 }
 
-func New(opts ...options.Option) (*Client, error) {
-	options := options.DefaultOptions()
-	for _, opt := range opts {
-		opt(&options)
-	}
-
-	admin, err := kafka.NewAdmin(options.Brokers)
+func New(opts ...kafka.Option) (*Client, error) {
+	client, err := kafka.New(opts...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create kafka connection: %w", err)
+		return nil, err
 	}
-	defer admin.Close()
-
 	// Ensure topics exist
-	admin.CreateTopics(
-		fmt.Sprintf("%s_tasks", options.Prefix),
-		fmt.Sprintf("%s_streams", options.Prefix),
-	)
-
-	writer, err := kafka.NewWriter(options.Brokers, fmt.Sprintf("%s_tasks", options.Prefix))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create writer: %w", err)
+	if err := client.CreateTopics(context.Background(), "tasks", "streams"); err != nil {
+		return nil, err
 	}
 
-	reader, err := kafka.NewReader(options.Brokers, fmt.Sprintf("%s_streams", options.Prefix), "stream-group")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create reader: %w", err)
-	}
+	writer := client.NewWriter("tasks")
+	reader := client.NewReader("streams")
 
 	return &Client{
 		writer:  writer,
 		reader:  reader,
-		streams: make(map[string]chan shared.Stream),
-		channel: make(chan shared.Stream, options.StreamBufferSize),
-		options: options,
+		streams: make(map[string]chan event.TaskEvent),
+		channel: make(chan event.TaskEvent, 100),
 	}, nil
 }
 
-func (c *Client) Submit(ctx context.Context, task *shared.Task) (chan shared.Stream, error) {
-	if err := c.writer.WriteJSON(ctx, task.ID, task); err != nil {
+func (c *Client) Submit(ctx context.Context, te *event.TaskEvent) (chan event.TaskEvent, error) {
+	if err := c.writer.WriteTask(ctx, te); err != nil {
 		return nil, fmt.Errorf("failed to submit task: %w", err)
 	}
 
-	channel := make(chan shared.Stream, c.options.StreamBufferSize)
+	channel := make(chan event.TaskEvent, 100)
 	c.mutex.Lock()
-	c.streams[task.ID] = channel
+	c.streams[te.ID] = channel
 	c.mutex.Unlock()
 
 	go func() {
 		defer func() {
 			c.mutex.Lock()
-			delete(c.streams, task.ID)
+			delete(c.streams, te.ID)
 			close(channel)
 			c.mutex.Unlock()
 		}()
 
-		for {
-			var stream shared.Stream
+		/* for {
+			var stream task.Task
 			if err := c.reader.ReadJSON(ctx, &stream); err != nil {
 				if ctx.Err() != nil {
 					return
@@ -93,7 +75,7 @@ func (c *Client) Submit(ctx context.Context, task *shared.Task) (chan shared.Str
 					return
 				}
 			}
-		}
+		} */
 	}()
 
 	return channel, nil
@@ -104,7 +86,7 @@ func (c *Client) Close() error {
 	for _, channel := range c.streams {
 		close(channel)
 	}
-	c.streams = make(map[string]chan shared.Stream)
+	c.streams = make(map[string]chan event.TaskEvent)
 	c.mutex.Unlock()
 
 	var errs []error
