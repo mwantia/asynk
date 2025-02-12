@@ -5,11 +5,12 @@ import (
 )
 
 const (
-	DefaultBroker          = "localhost:9092"
-	DefaultNetwork         = "tcp"
-	DefaultGroupID         = ""
-	DefaultTopicPrefix     = "asynk"
-	DefaultPool            = "default"
+	DefaultBroker      = "localhost:9092"
+	DefaultNetwork     = "tcp"
+	DefaultGroupID     = ""
+	DefaultTopicPrefix = "asynk"
+	DefaultPool        = "default"
+
 	DefaultMaxWait         = time.Millisecond * 50
 	DefaultCommitInterval  = time.Millisecond * 100
 	DefaultMinBytes        = 10e3
