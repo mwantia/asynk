@@ -28,24 +28,55 @@ func (c *Client) NewWriter(topic string) *Writer {
 	}
 }
 
-func (w *Writer) WriteTask(ctx context.Context, te *event.TaskEvent) error {
+func (w *Writer) WriteSubmitEvent(ctx context.Context, ev *event.TaskSubmitEvent) error {
 	msg := kafka.Message{
-		Key: []byte(te.ID),
+		Key:   []byte(ev.ID),
+		Value: ev.Payload,
 		Headers: []kafka.Header{
 			{
 				Key:   "id",
-				Value: []byte(te.ID),
-			},
-			{
-				Key:   "status",
-				Value: []byte(te.Status),
+				Value: []byte(ev.ID),
 			},
 			{
 				Key:   "type",
-				Value: []byte(te.Type),
+				Value: []byte(ev.Type),
 			},
 		},
-		Value: te.Payload,
+	}
+	for k, v := range ev.Metadata {
+		msg.Headers = append(msg.Headers, kafka.Header{
+			Key:   k,
+			Value: []byte(v),
+		})
+	}
+
+	if err := w.writer.WriteMessages(ctx, msg); err != nil {
+		return fmt.Errorf("failed to write message: %w", err)
+	}
+
+	return nil
+}
+
+func (w *Writer) WriteStatusEvent(ctx context.Context, ev *event.TaskStatusEvent) error {
+	msg := kafka.Message{
+		Key:   []byte(ev.TaskID),
+		Value: ev.Payload,
+		Headers: []kafka.Header{
+			{
+				Key:   "id",
+				Value: []byte(ev.TaskID),
+			},
+			{
+				Key:   "status",
+				Value: []byte(ev.Status),
+			},
+		},
+	}
+	for k, v := range ev.Metadata {
+		msg.Headers = append(msg.Headers, kafka.Header{
+			Key:   k,
+			Value: []byte(v),
+		})
 	}
 
 	if err := w.writer.WriteMessages(ctx, msg); err != nil {

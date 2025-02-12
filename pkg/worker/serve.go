@@ -49,7 +49,7 @@ func (mux *ServeMux) Handle(topic string, handler Handler) error {
 	return nil
 }
 
-func (mux *ServeMux) HandleFunc(topic string, handler func(context.Context, *kafka.Client, *event.TaskEvent) error) error {
+func (mux *ServeMux) HandleFunc(topic string, handler func(context.Context, *kafka.Client, *event.TaskSubmitEvent) error) error {
 	if handler == nil {
 		return fmt.Errorf("invalid handler")
 	}
@@ -57,13 +57,13 @@ func (mux *ServeMux) HandleFunc(topic string, handler func(context.Context, *kaf
 	return mux.Handle(topic, HandlerFunc(handler))
 }
 
-func (mux *ServeMux) ProcessTask(ctx context.Context, c *kafka.Client, t *event.TaskEvent) error {
+func (mux *ServeMux) ProcessSubmitEvent(ctx context.Context, c *kafka.Client, ev *event.TaskSubmitEvent) error {
 	mux.mutex.RLock()
 	defer mux.mutex.RUnlock()
 
 	handler, exist := mux.handlers[""]
 	if exist {
-		return handler.handler.ProcessTask(ctx, c, t)
+		return handler.handler.ProcessSubmitEvent(ctx, c, ev)
 	}
 
 	return fmt.Errorf("topic not found")

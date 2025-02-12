@@ -8,63 +8,44 @@ import (
 	"time"
 )
 
-type TaskEvent struct {
-	ID      string          `json:"id"`
-	Status  EventStatus     `json:"status"`
-	Type    EventType       `json:"type,omitempty"`
-	Payload json.RawMessage `json:"payload,omitempty"`
+type TaskSubmitEvent struct {
+	ID       string          `json:"id"`
+	Type     EventType       `json:"type"`
+	Payload  json.RawMessage `json:"payload"`
+	Metadata TaskMetadata    `json:"metadata,omitempty"`
 }
 
-func NewTaskEvent(opts ...TaskOption) (*TaskEvent, error) {
-	ev := TaskEvent{}
-	for _, opt := range opts {
-		if err := opt(&ev); err != nil {
-			return &ev, err
-		}
-	}
-
-	return &ev, nil
+type TaskStatusEvent struct {
+	TaskID   string          `json:"task_id"`
+	Status   EventStatus     `json:"status"`
+	Payload  json.RawMessage `json:"payload,omitempty"`
+	Metadata TaskMetadata    `json:"metadata,omitempty"`
 }
 
-type TaskOption func(*TaskEvent) error
+type TaskMetadata map[string]string
 
-func WithKey(key []byte) TaskOption {
-	return func(te *TaskEvent) error {
-		te.ID = string(key)
-		return nil
+func NewSubmitEvent(v interface{}) (*TaskSubmitEvent, error) {
+	var buf [16]byte
+	_, err := rand.Read(buf[:])
+	if err != nil {
+		return nil, err
 	}
-}
 
-func WithUUIDv7() TaskOption {
-	return func(t *TaskEvent) error {
-		var buf [16]byte
-		_, err := rand.Read(buf[:])
-		if err != nil {
-			return err
-		}
+	ts := big.NewInt(time.Now().UnixMilli())
+	ts.FillBytes(buf[0:6])
 
-		ts := big.NewInt(time.Now().UnixMilli())
-		ts.FillBytes(buf[0:6])
+	buf[6] = (buf[6] & 0x0F) | 0x70
+	buf[8] = (buf[8] & 0x3F) | 0x80
 
-		buf[6] = (buf[6] & 0x0F) | 0x70
-		buf[8] = (buf[8] & 0x3F) | 0x80
-
-		t.ID = fmt.Sprintf("%x", buf)
-		return nil
+	payload, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
 	}
-}
 
-func WithPayload(payload []byte) TaskOption {
-	return func(te *TaskEvent) error {
-		te.Payload = payload
-		return nil
-	}
-}
-
-func WithMarshal(v interface{}) TaskOption {
-	return func(t *TaskEvent) error {
-		payload, err := json.Marshal(v)
-		t.Payload = payload
-		return err
-	}
+	return &TaskSubmitEvent{
+		ID:       fmt.Sprintf("%x", buf),
+		Type:     TypeSubmit,
+		Payload:  payload,
+		Metadata: make(TaskMetadata),
+	}, nil
 }

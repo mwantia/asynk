@@ -3,7 +3,7 @@ package event
 type EventType string
 
 const (
-	TypeTask EventType = "task"
+	TypeSubmit EventType = "submit"
 )
 
 func (s EventType) String() string {

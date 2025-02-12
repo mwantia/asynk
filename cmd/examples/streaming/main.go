@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log"
 
 	"github.com/mwantia/asynk/pkg/client"
 	"github.com/mwantia/asynk/pkg/event"
@@ -18,7 +18,7 @@ type MockData struct {
 }
 
 func main() {
-	c, err := client.New(
+	c, err := client.New(MockTopic,
 		kafka.WithBrokers("kafka:9092"),
 		kafka.WithPool("debug"),
 	)
@@ -28,22 +28,25 @@ func main() {
 
 	defer c.Close()
 
-	te, _ := event.NewTaskEvent(
-		event.WithUUIDv7(),
-		event.WithMarshal(MockData{
-			Content: "Hello World",
-		}),
-	)
+	log.Println("Submitting new task with mock data...")
 
-	streams, err := c.Submit(context.Background(), te)
+	ev, _ := event.NewSubmitEvent(MockData{
+		Content: "Hello World",
+	})
+
+	streams, err := c.Submit(context.Background(), ev)
 	if err != nil {
 		panic(err)
 	}
 
+	log.Println("Task submitted and waiting for status reports...")
+
 	for stream := range streams {
-		fmt.Printf("Task: %s: Status = '%s'\n", stream.ID, stream.Status)
 		if stream.Status.IsTerminal() {
+			log.Printf("Task completed with payload: %v", string(stream.Payload))
 			break
 		}
+
+		log.Printf("Received status: %s", stream.Status)
 	}
 }

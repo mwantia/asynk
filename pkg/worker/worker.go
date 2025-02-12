@@ -31,12 +31,18 @@ func (w *Worker) Run(ctx context.Context, mux *ServeMux) error {
 	var errs []error
 
 	for suffix, handler := range mux.handlers {
+		// Ensure that the topics have been created beforehand
+		if err := w.client.CreateTopics(ctx, suffix+".tasks.submit", suffix+".tasks.status"); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+
 		wg.Add(1)
 
 		go func() {
 			defer wg.Done()
 
-			r := w.client.NewReader(suffix)
+			r := w.client.NewReader(suffix + ".tasks.submit")
 			cleanups = append(cleanups, r.Close)
 
 			for {
@@ -44,13 +50,13 @@ func (w *Worker) Run(ctx context.Context, mux *ServeMux) error {
 				case <-ctx.Done():
 					return
 				default:
-					task, err := r.ReadTask(ctx)
+					ev, err := r.ReadSubmitEvent(ctx)
 					if err != nil {
 						log.Println(err)
 						continue
 					}
 
-					if err := handler.handler.ProcessTask(ctx, w.client, task); err != nil {
+					if err := handler.handler.ProcessSubmitEvent(ctx, w.client, ev); err != nil {
 						log.Println(err)
 						continue
 					}
@@ -59,15 +65,13 @@ func (w *Worker) Run(ctx context.Context, mux *ServeMux) error {
 		}()
 	}
 
-	<-ctx.Done()
+	wg.Wait()
 
 	for _, cleanup := range cleanups {
 		if err := cleanup(); err != nil {
 			errs = append(errs, err)
 		}
 	}
-
-	wg.Wait()
 
 	if len(errs) > 0 {
 		return fmt.Errorf("errors during cleanup: %v", errs)

@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/mwantia/asynk/pkg/event"
 	"github.com/mwantia/asynk/pkg/kafka"
@@ -25,7 +26,7 @@ func main() {
 	defer cancel()
 
 	w, err := worker.New(
-		kafka.WithBrokers("kafka-proxy.ingress.consul:29090"),
+		kafka.WithBrokers("kafka:9092"),
 		kafka.WithTopicPrefix("asynk"),
 		kafka.WithPool("debug"),
 		kafka.WithGroupID("group1"),
@@ -46,14 +47,47 @@ func main() {
 	log.Println("Worker cleanup completed...")
 }
 
-func HandleMock(ctx context.Context, c *kafka.Client, te *event.TaskEvent) error {
+func HandleMock(ctx context.Context, c *kafka.Client, ev *event.TaskSubmitEvent) error {
 	var data MockData
-	if err := json.Unmarshal(te.Payload, &data); err != nil {
+	if err := json.Unmarshal(ev.Payload, &data); err != nil {
 		return err
 	}
 
-	log.Println(te.ID)
+	log.Printf("New task '%s' received with mock data:\n", ev.ID)
 	log.Println(data.Content)
 
-	return nil
+	writer := c.NewWriter(MockTopic + ".tasks.status")
+
+	timeout := time.After(1 * time.Minute)
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	log.Println("Performing work for mock...")
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := writer.WriteStatusEvent(ctx, &event.TaskStatusEvent{
+				TaskID: ev.ID,
+				Status: event.StatusRunning,
+			}); err != nil {
+				return err
+			}
+		case <-ctx.Done():
+			log.Println("Work has been cancelled...")
+
+			return writer.WriteStatusEvent(ctx, &event.TaskStatusEvent{
+				TaskID: ev.ID,
+				Status: event.StatusLost,
+			})
+		case <-timeout:
+			log.Println("Work has been completed...")
+
+			return writer.WriteStatusEvent(ctx, &event.TaskStatusEvent{
+				TaskID:  ev.ID,
+				Status:  event.StatusComplete,
+				Payload: ev.Payload,
+			})
+		}
+	}
 }

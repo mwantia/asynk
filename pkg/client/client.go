@@ -10,72 +10,71 @@ import (
 )
 
 type Client struct {
+	suffix  string
 	writer  *kafka.Writer
 	reader  *kafka.Reader
-	streams map[string]chan event.TaskEvent
-	channel chan event.TaskEvent
+	events  map[string]chan event.TaskStatusEvent
+	channel chan event.TaskStatusEvent
 	mutex   sync.RWMutex
 }
 
-func New(opts ...kafka.Option) (*Client, error) {
+func New(suffix string, opts ...kafka.Option) (*Client, error) {
 	client, err := kafka.New(opts...)
 	if err != nil {
 		return nil, err
 	}
 	// Ensure topics exist
-	if err := client.CreateTopics(context.Background(), "tasks", "streams"); err != nil {
+	if err := client.CreateTopics(context.Background(), suffix+".tasks.submit", suffix+".tasks.status"); err != nil {
 		return nil, err
 	}
 
-	writer := client.NewWriter("tasks")
-	reader := client.NewReader("streams")
-
 	return &Client{
-		writer:  writer,
-		reader:  reader,
-		streams: make(map[string]chan event.TaskEvent),
-		channel: make(chan event.TaskEvent, 100),
+		suffix:  suffix,
+		writer:  client.NewWriter(suffix + ".tasks.submit"),
+		reader:  client.NewReader(suffix + ".tasks.status"),
+		events:  make(map[string]chan event.TaskStatusEvent),
+		channel: make(chan event.TaskStatusEvent, 100),
 	}, nil
 }
 
-func (c *Client) Submit(ctx context.Context, te *event.TaskEvent) (chan event.TaskEvent, error) {
-	if err := c.writer.WriteTask(ctx, te); err != nil {
+func (c *Client) Submit(ctx context.Context, ev *event.TaskSubmitEvent) (chan event.TaskStatusEvent, error) {
+	if err := c.writer.WriteSubmitEvent(ctx, ev); err != nil {
 		return nil, fmt.Errorf("failed to submit task: %w", err)
 	}
 
-	channel := make(chan event.TaskEvent, 100)
+	channel := make(chan event.TaskStatusEvent, 100)
 	c.mutex.Lock()
-	c.streams[te.ID] = channel
+	c.events[ev.ID] = channel
 	c.mutex.Unlock()
 
 	go func() {
 		defer func() {
 			c.mutex.Lock()
-			delete(c.streams, te.ID)
+			delete(c.events, ev.ID)
 			close(channel)
 			c.mutex.Unlock()
 		}()
 
-		/* for {
-			var stream task.Task
-			if err := c.reader.ReadJSON(ctx, &stream); err != nil {
+		for {
+			evs, err := c.reader.ReadStatusEvent(ctx)
+			if err != nil {
 				if ctx.Err() != nil {
 					return
 				}
 				continue
 			}
 
-			if stream.Task == task.ID {
+			if evs.TaskID == ev.ID {
 				select {
-				case channel <- stream:
-					if stream.Status.IsTerminal() {
+				case channel <- *evs:
+					if evs.Status.IsTerminal() {
 						return
 					}
 				case <-ctx.Done():
 					return
 				}
 			}
-		} */
+		}
 	}()
 
 	return channel, nil
@@ -83,10 +82,10 @@ func (c *Client) Submit(ctx context.Context, te *event.TaskEvent) (chan event.Ta
 
 func (c *Client) Close() error {
 	c.mutex.Lock()
-	for _, channel := range c.streams {
+	for _, channel := range c.events {
 		close(channel)
 	}
-	c.streams = make(map[string]chan event.TaskEvent)
+	c.events = make(map[string]chan event.TaskStatusEvent)
 	c.mutex.Unlock()
 
 	var errs []error
