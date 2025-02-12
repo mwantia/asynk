@@ -3,7 +3,6 @@ package kafka
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/mwantia/asynk/pkg/event"
 	"github.com/segmentio/kafka-go"
@@ -15,17 +14,23 @@ type Reader struct {
 }
 
 func (c *Client) NewReader(topic string) *Reader {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	reader := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:        c.options.Brokers,
+		Topic:          c.fullTopic(topic),
+		GroupID:        c.options.GroupID,
+		MaxWait:        c.options.MaxWait,
+		CommitInterval: c.options.CommitInterval,
+		MinBytes:       c.options.MinBytes,
+		MaxBytes:       c.options.MaxBytes,
+	})
+	c.cleanups = append(c.cleanups, reader.Close)
+
 	return &Reader{
 		client: c,
-		reader: kafka.NewReader(kafka.ReaderConfig{
-			Brokers:        c.options.Brokers,
-			Topic:          c.fullTopic(topic),
-			GroupID:        c.options.GroupID,
-			MinBytes:       c.options.MinBytes,
-			MaxBytes:       c.options.MaxBytes,
-			MaxWait:        time.Millisecond * 50,
-			CommitInterval: time.Millisecond * 100,
-		}),
+		reader: reader,
 	}
 }
 

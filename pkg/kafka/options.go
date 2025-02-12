@@ -10,6 +10,8 @@ const (
 	DefaultGroupID         = ""
 	DefaultTopicPrefix     = "asynk"
 	DefaultPool            = "default"
+	DefaultMaxWait         = time.Millisecond * 50
+	DefaultCommitInterval  = time.Millisecond * 100
 	DefaultMinBytes        = 10e3
 	DefaultMaxBytes        = 10e3
 	DefaultConnectTimeout  = time.Second * 30
@@ -22,6 +24,8 @@ type Options struct {
 	GroupID         string        `json:"group_id,omitempty"`
 	TopicPrefix     string        `json:"topic_prefix,omitempty"`
 	Pool            string        `json:"pool,omitempty"`
+	MaxWait         time.Duration `json:"max_wait,omitempty"`
+	CommitInterval  time.Duration `json:"commit_interval,omitempty"`
 	MinBytes        int           `json:"min_bytes,omitempty"`
 	MaxBytes        int           `json:"max_bytes,omitempty"`
 	ConnectTimeout  time.Duration `json:"connect_timeout,omitempty"`
@@ -37,6 +41,8 @@ func DefaultOptions() Options {
 		GroupID:         DefaultGroupID,
 		TopicPrefix:     DefaultTopicPrefix,
 		Pool:            DefaultPool,
+		MaxWait:         DefaultMaxWait,
+		CommitInterval:  DefaultCommitInterval,
 		MinBytes:        DefaultMinBytes,
 		MaxBytes:        DefaultMaxBytes,
 		ConnectTimeout:  DefaultConnectTimeout,
@@ -77,6 +83,20 @@ func WithTopicPrefix(topicPrefix string) Option {
 func WithPool(pool string) Option {
 	return func(o *Options) error {
 		o.Pool = pool
+		return nil
+	}
+}
+
+func WithMaxWait(wait time.Duration) Option {
+	return func(o *Options) error {
+		o.MaxWait = wait
+		return nil
+	}
+}
+
+func WithCommitInterval(interval time.Duration) Option {
+	return func(o *Options) error {
+		o.CommitInterval = interval
 		return nil
 	}
 }

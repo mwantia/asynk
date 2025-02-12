@@ -11,6 +11,7 @@ import (
 
 type Client struct {
 	suffix  string
+	client  *kafka.Client
 	writer  *kafka.Writer
 	reader  *kafka.Reader
 	events  map[string]chan event.TaskStatusEvent
@@ -30,6 +31,7 @@ func New(suffix string, opts ...kafka.Option) (*Client, error) {
 
 	return &Client{
 		suffix:  suffix,
+		client:  client,
 		writer:  client.NewWriter(suffix + ".tasks.submit"),
 		reader:  client.NewReader(suffix + ".tasks.status"),
 		events:  make(map[string]chan event.TaskStatusEvent),
@@ -82,23 +84,12 @@ func (c *Client) Submit(ctx context.Context, ev *event.TaskSubmitEvent) (chan ev
 
 func (c *Client) Close() error {
 	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	for _, channel := range c.events {
 		close(channel)
 	}
 	c.events = make(map[string]chan event.TaskStatusEvent)
-	c.mutex.Unlock()
 
-	var errs []error
-	if err := c.writer.Close(); err != nil {
-		errs = append(errs, fmt.Errorf("failed to close writer: %w", err))
-	}
-	if err := c.reader.Close(); err != nil {
-		errs = append(errs, fmt.Errorf("failed to close reader: %w", err))
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("errors during shutdown: %v", errs)
-	}
-
-	return nil
+	return c.client.Cleanup()
 }

@@ -3,6 +3,7 @@ package kafka
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/mwantia/asynk/pkg/event"
 	"github.com/segmentio/kafka-go"
@@ -18,13 +19,22 @@ func (c *Client) NewWriter(topic string) *Writer {
 		panic("not supported")
 	}
 
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	writer := &kafka.Writer{
+		Addr:         kafka.TCP(c.options.Brokers...),
+		Topic:        c.fullTopic(topic),
+		Balancer:     &kafka.LeastBytes{},
+		BatchSize:    10,
+		BatchTimeout: time.Millisecond * 10,
+		Async:        true,
+	}
+	c.cleanups = append(c.cleanups, writer.Close)
+
 	return &Writer{
 		client: c,
-		writer: &kafka.Writer{
-			Addr:     kafka.TCP(c.options.Brokers...),
-			Topic:    c.fullTopic(topic),
-			Balancer: &kafka.LeastBytes{},
-		},
+		writer: writer,
 	}
 }
 
