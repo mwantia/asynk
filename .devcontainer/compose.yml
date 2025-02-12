@@ -24,10 +24,10 @@ services:
       KAFKA_METADATA_MAX_RETENTION_MS: 60000
       KAFKA_METADATA_LOG_MAX_RECORD_BYTES_BETWEEN_SNAPSHOTS: 2800
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
-  kafdrop:
-    image: obsidiandynamics/kafdrop:latest
+  ui:
+    image: provectuslabs/kafka-ui:latest
     environment:
-      KAFKA_BROKERCONNECT: kafka:9092
+      DYNAMIC_CONFIG_ENABLED: 'true'
     depends_on:
       - kafka
     

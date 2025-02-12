@@ -6,7 +6,7 @@
     "remoteUser": "vscode",
     "forwardPorts": [
         "kafka:9092",
-        "kafdrop:9000"
+        "ui:8080"
     ],
     "containerUser": "vscode",
     "customizations": {
