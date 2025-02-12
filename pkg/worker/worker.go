@@ -2,7 +2,7 @@ package worker
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log"
 	"sync"
 
@@ -27,7 +27,7 @@ func New(opts ...kafka.Option) (*Worker, error) {
 
 func (w *Worker) Run(ctx context.Context, mux *ServeMux) error {
 	var wg sync.WaitGroup
-	cleanups := []func() error{}
+	// cleanups := []func() error{}
 	var errs []error
 
 	for suffix, handler := range mux.handlers {
@@ -43,7 +43,7 @@ func (w *Worker) Run(ctx context.Context, mux *ServeMux) error {
 			defer wg.Done()
 
 			r := w.client.NewReader(suffix + ".tasks.submit")
-			cleanups = append(cleanups, r.Close)
+			// cleanups = append(cleanups, r.Close)
 
 			for {
 				select {
@@ -67,14 +67,18 @@ func (w *Worker) Run(ctx context.Context, mux *ServeMux) error {
 
 	wg.Wait()
 
-	for _, cleanup := range cleanups {
+	/* for _, cleanup := range cleanups {
 		if err := cleanup(); err != nil {
 			errs = append(errs, err)
 		}
+	} */
+
+	if err := w.client.Cleanup(); err != nil {
+		errs = append(errs, err)
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("errors during cleanup: %v", errs)
+		return errors.Join(errs...)
 	}
 
 	return nil

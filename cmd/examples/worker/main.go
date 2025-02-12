@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"time"
+	"strings"
 
 	"github.com/mwantia/asynk/pkg/event"
 	"github.com/mwantia/asynk/pkg/kafka"
@@ -14,7 +14,21 @@ import (
 )
 
 const (
-	MockTopic = "mock"
+	MockTopic   = "mock"
+	MockContent = `Lorem ipsum dolor sit amet, consectetur adipiscing elit. 
+	Pellentesque ac elit vitae lectus ultricies ornare id nec neque. 
+	Mauris condimentum nec leo at sagittis. 
+	Nam aliquam neque in nunc dapibus, non venenatis est tincidunt. 
+	Etiam pulvinar felis eget magna fringilla luctus. 
+	Quisque est ante, eleifend vitae dui non, luctus laoreet ligula. 
+	Curabitur nec tortor scelerisque, rhoncus felis in, volutpat nibh. 
+	Ut ac efficitur ante. 
+	Phasellus sed tellus et metus vestibulum placerat ac in orci. 
+	Maecenas eget urna nulla. 
+	Fusce eget ligula tristique, ultricies ante ut, porta lacus. 
+	Donec consectetur ipsum posuere, suscipit augue vel, auctor eros. 
+	Vestibulum vestibulum nisl velit, eget consectetur ante condimentum eu. 
+	In finibus elementum fringilla.`
 )
 
 type MockData struct {
@@ -58,36 +72,39 @@ func HandleMock(ctx context.Context, c *kafka.Client, ev *event.TaskSubmitEvent)
 
 	writer := c.NewWriter(MockTopic + ".tasks.status")
 
-	timeout := time.After(1 * time.Minute)
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-
 	log.Println("Performing work for mock...")
 
-	for {
+	words := strings.Fields(MockContent)
+	for _, word := range words {
 		select {
-		case <-ticker.C:
-			if err := writer.WriteStatusEvent(ctx, &event.TaskStatusEvent{
-				TaskID: ev.ID,
-				Status: event.StatusRunning,
-			}); err != nil {
-				return err
-			}
 		case <-ctx.Done():
-			log.Println("Work has been cancelled...")
-
 			return writer.WriteStatusEvent(ctx, &event.TaskStatusEvent{
 				TaskID: ev.ID,
 				Status: event.StatusLost,
 			})
-		case <-timeout:
-			log.Println("Work has been completed...")
-
-			return writer.WriteStatusEvent(ctx, &event.TaskStatusEvent{
-				TaskID:  ev.ID,
-				Status:  event.StatusComplete,
-				Payload: ev.Payload,
+		default:
+			payload, err := json.Marshal(MockData{
+				Content: word + " ",
 			})
+			if err != nil {
+				return err
+			}
+
+			err = writer.WriteStatusEvent(ctx, &event.TaskStatusEvent{
+				TaskID:  ev.ID,
+				Status:  event.StatusRunning,
+				Payload: payload,
+			})
+			if err != nil {
+				return err
+			}
 		}
 	}
+
+	log.Println("Work has been completed...")
+
+	return writer.WriteStatusEvent(ctx, &event.TaskStatusEvent{
+		TaskID: ev.ID,
+		Status: event.StatusComplete,
+	})
 }

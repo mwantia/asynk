@@ -5,3 +5,13 @@ tasks:
     cmds:
       - go mod download
       - go mod tidy
+
+  worker:
+    cmds:
+      - task: setup
+      - go run cmd/examples/worker/main.go
+
+  streaming:
+    cmds:
+      - task: setup
+      - go run cmd/examples/streaming/main.go

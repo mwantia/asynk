@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 
 	"github.com/mwantia/asynk/pkg/client"
@@ -43,10 +45,15 @@ func main() {
 
 	for stream := range streams {
 		if stream.Status.IsTerminal() {
-			log.Printf("Task completed with payload: %v", string(stream.Payload))
+			log.Println("Task completed with payload...")
 			break
 		}
 
-		log.Printf("Received status: %s", stream.Status)
+		var data MockData
+		if err := json.Unmarshal(stream.Payload, &data); err != nil {
+			panic(err)
+		}
+
+		fmt.Print(data.Content)
 	}
 }
