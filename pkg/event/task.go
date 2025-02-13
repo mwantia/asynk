@@ -8,23 +8,23 @@ import (
 	"time"
 )
 
-type TaskSubmitEvent struct {
+type SubmitEvent struct {
 	ID       string          `json:"id"`
 	Type     EventType       `json:"type"`
 	Payload  json.RawMessage `json:"payload"`
-	Metadata TaskMetadata    `json:"metadata,omitempty"`
+	Metadata Metadata        `json:"metadata,omitempty"`
 }
 
-type TaskStatusEvent struct {
+type StatusEvent struct {
 	TaskID   string          `json:"task_id"`
-	Status   EventStatus     `json:"status"`
+	Status   Status          `json:"status"`
 	Payload  json.RawMessage `json:"payload,omitempty"`
-	Metadata TaskMetadata    `json:"metadata,omitempty"`
+	Metadata Metadata        `json:"metadata,omitempty"`
 }
 
-type TaskMetadata map[string]string
+type Metadata map[string]string
 
-func NewSubmitEvent(v interface{}) (*TaskSubmitEvent, error) {
+func NewSubmitEvent(v interface{}) (*SubmitEvent, error) {
 	var buf [16]byte
 	_, err := rand.Read(buf[:])
 	if err != nil {
@@ -42,10 +42,10 @@ func NewSubmitEvent(v interface{}) (*TaskSubmitEvent, error) {
 		return nil, err
 	}
 
-	return &TaskSubmitEvent{
+	return &SubmitEvent{
 		ID:       fmt.Sprintf("%x", buf),
 		Type:     TypeSubmit,
 		Payload:  payload,
-		Metadata: make(TaskMetadata),
+		Metadata: make(Metadata),
 	}, nil
 }

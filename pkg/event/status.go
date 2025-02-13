@@ -1,19 +1,19 @@
 package event
 
-type EventStatus string
+type Status string
 
 const (
-	StatusLost     EventStatus = "lost"
-	StatusPending  EventStatus = "pending"
-	StatusRunning  EventStatus = "running"
-	StatusComplete EventStatus = "complete"
-	StatusFailed   EventStatus = "failed"
+	StatusLost     Status = "lost"
+	StatusPending  Status = "pending"
+	StatusRunning  Status = "running"
+	StatusComplete Status = "complete"
+	StatusFailed   Status = "failed"
 )
 
-func (s EventStatus) String() string {
+func (s Status) String() string {
 	return string(s)
 }
 
-func (s EventStatus) IsTerminal() bool {
+func (s Status) IsTerminal() bool {
 	return s == StatusComplete || s == StatusFailed
 }

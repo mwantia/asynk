@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/mwantia/asynk/pkg/event"
 	"github.com/mwantia/asynk/pkg/kafka"
+	"github.com/mwantia/asynk/pkg/options"
 )
 
 type Client struct {
@@ -14,18 +16,27 @@ type Client struct {
 	client  *kafka.Client
 	writer  *kafka.Writer
 	reader  *kafka.Reader
-	events  map[string]chan event.TaskStatusEvent
-	channel chan event.TaskStatusEvent
+	events  map[string]chan event.StatusEvent
+	channel chan event.StatusEvent
 	mutex   sync.RWMutex
 }
 
-func New(suffix string, opts ...kafka.Option) (*Client, error) {
+func New(suffix string, opts ...options.ClientOption) (*Client, error) {
 	client, err := kafka.New(opts...)
 	if err != nil {
 		return nil, err
 	}
+
+	ctx := context.Background()
 	// Ensure topics exist
-	if err := client.CreateTopics(context.Background(), suffix+".tasks.submit", suffix+".tasks.status"); err != nil {
+	if err := client.CreateTopic(ctx, suffix+".tasks.submit",
+		options.WithRetentionTime(time.Hour*24*7),
+	); err != nil {
+		return nil, err
+	}
+	if err := client.CreateTopic(ctx, suffix+".tasks.status",
+		options.WithRetentionTime(time.Hour*24),
+	); err != nil {
 		return nil, err
 	}
 
@@ -34,18 +45,18 @@ func New(suffix string, opts ...kafka.Option) (*Client, error) {
 		client:  client,
 		writer:  client.NewWriter(suffix + ".tasks.submit"),
 		reader:  client.NewReader(suffix + ".tasks.status"),
-		events:  make(map[string]chan event.TaskStatusEvent),
-		channel: make(chan event.TaskStatusEvent, 100),
+		events:  make(map[string]chan event.StatusEvent),
+		channel: make(chan event.StatusEvent, 100),
 	}, nil
 }
 
-func (c *Client) Submit(ctx context.Context, ev *event.TaskSubmitEvent) (chan event.TaskStatusEvent, error) {
+func (c *Client) Submit(ctx context.Context, ev *event.SubmitEvent) (chan event.StatusEvent, error) {
 	if err := c.writer.WriteSubmitEvent(ctx, ev); err != nil {
 		return nil, fmt.Errorf("failed to submit task: %w", err)
 	}
 
-	channel := make(chan event.TaskStatusEvent, 100)
 	c.mutex.Lock()
+	channel := make(chan event.StatusEvent, 100)
 	c.events[ev.ID] = channel
 	c.mutex.Unlock()
 
@@ -89,7 +100,7 @@ func (c *Client) Close() error {
 	for _, channel := range c.events {
 		close(channel)
 	}
-	c.events = make(map[string]chan event.TaskStatusEvent)
+	c.events = make(map[string]chan event.StatusEvent)
 
 	return c.client.Cleanup()
 }

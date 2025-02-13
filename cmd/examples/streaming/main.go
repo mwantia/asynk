@@ -8,7 +8,7 @@ import (
 
 	"github.com/mwantia/asynk/pkg/client"
 	"github.com/mwantia/asynk/pkg/event"
-	"github.com/mwantia/asynk/pkg/kafka"
+	"github.com/mwantia/asynk/pkg/options"
 )
 
 const (
@@ -21,8 +21,8 @@ type MockData struct {
 
 func main() {
 	c, err := client.New(MockTopic,
-		kafka.WithBrokers("kafka:9092"),
-		kafka.WithPool("debug"),
+		options.WithBrokers("kafka:9092"),
+		options.WithPool("debug"),
 	)
 	if err != nil {
 		panic(err)

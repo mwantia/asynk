@@ -10,6 +10,7 @@ import (
 
 	"github.com/mwantia/asynk/pkg/event"
 	"github.com/mwantia/asynk/pkg/kafka"
+	"github.com/mwantia/asynk/pkg/options"
 	"github.com/mwantia/asynk/pkg/worker"
 )
 
@@ -40,10 +41,9 @@ func main() {
 	defer cancel()
 
 	w, err := worker.New(
-		kafka.WithBrokers("kafka:9092"),
-		kafka.WithTopicPrefix("asynk"),
-		kafka.WithPool("debug"),
-		kafka.WithGroupID("group1"),
+		options.WithBrokers("kafka:9092"),
+		options.WithPool("debug"),
+		options.WithGroupID("group1"),
 	)
 	if err != nil {
 		panic(err)
@@ -61,7 +61,7 @@ func main() {
 	log.Println("Worker cleanup completed...")
 }
 
-func HandleMock(ctx context.Context, c *kafka.Client, ev *event.TaskSubmitEvent) error {
+func HandleMock(ctx context.Context, c *kafka.Client, ev *event.SubmitEvent) error {
 	var data MockData
 	if err := json.Unmarshal(ev.Payload, &data); err != nil {
 		return err
@@ -78,7 +78,7 @@ func HandleMock(ctx context.Context, c *kafka.Client, ev *event.TaskSubmitEvent)
 	for _, word := range words {
 		select {
 		case <-ctx.Done():
-			return writer.WriteStatusEvent(ctx, &event.TaskStatusEvent{
+			return writer.WriteStatusEvent(ctx, &event.StatusEvent{
 				TaskID: ev.ID,
 				Status: event.StatusLost,
 			})
@@ -90,7 +90,7 @@ func HandleMock(ctx context.Context, c *kafka.Client, ev *event.TaskSubmitEvent)
 				return err
 			}
 
-			err = writer.WriteStatusEvent(ctx, &event.TaskStatusEvent{
+			err = writer.WriteStatusEvent(ctx, &event.StatusEvent{
 				TaskID:  ev.ID,
 				Status:  event.StatusRunning,
 				Payload: payload,
@@ -103,7 +103,7 @@ func HandleMock(ctx context.Context, c *kafka.Client, ev *event.TaskSubmitEvent)
 
 	log.Println("Work has been completed...")
 
-	return writer.WriteStatusEvent(ctx, &event.TaskStatusEvent{
+	return writer.WriteStatusEvent(ctx, &event.StatusEvent{
 		TaskID: ev.ID,
 		Status: event.StatusComplete,
 	})

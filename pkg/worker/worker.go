@@ -5,8 +5,10 @@ import (
 	"errors"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/mwantia/asynk/pkg/kafka"
+	"github.com/mwantia/asynk/pkg/options"
 )
 
 type Worker struct {
@@ -14,7 +16,7 @@ type Worker struct {
 	client *kafka.Client
 }
 
-func New(opts ...kafka.Option) (*Worker, error) {
+func New(opts ...options.ClientOption) (*Worker, error) {
 	client, err := kafka.New(opts...)
 	if err != nil {
 		return nil, err
@@ -32,7 +34,15 @@ func (w *Worker) Run(ctx context.Context, mux *ServeMux) error {
 
 	for suffix, handler := range mux.handlers {
 		// Ensure that the topics have been created beforehand
-		if err := w.client.CreateTopics(ctx, suffix+".tasks.submit", suffix+".tasks.status"); err != nil {
+		if err := w.client.CreateTopic(ctx, suffix+".tasks.submit",
+			options.WithRetentionTime(time.Hour*24*7),
+		); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if err := w.client.CreateTopic(ctx, suffix+".tasks.status",
+			options.WithRetentionTime(time.Hour*24),
+		); err != nil {
 			errs = append(errs, err)
 			continue
 		}

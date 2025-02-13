@@ -3,7 +3,6 @@ package kafka
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/mwantia/asynk/pkg/event"
 	"github.com/segmentio/kafka-go"
@@ -26,9 +25,10 @@ func (c *Client) NewWriter(topic string) *Writer {
 		Addr:         kafka.TCP(c.options.Brokers...),
 		Topic:        c.fullTopic(topic),
 		Balancer:     &kafka.LeastBytes{},
-		BatchSize:    10,
-		BatchTimeout: time.Millisecond * 10,
-		Async:        true,
+		BatchSize:    c.options.BatchSize,
+		BatchTimeout: c.options.BatchTimeout,
+		BatchBytes:   int64(c.options.BatchBytes),
+		Async:        c.options.Async,
 	}
 	c.cleanups = append(c.cleanups, writer.Close)
 
@@ -38,7 +38,7 @@ func (c *Client) NewWriter(topic string) *Writer {
 	}
 }
 
-func (w *Writer) WriteSubmitEvent(ctx context.Context, ev *event.TaskSubmitEvent) error {
+func (w *Writer) WriteSubmitEvent(ctx context.Context, ev *event.SubmitEvent) error {
 	msg := kafka.Message{
 		Key:   []byte(ev.ID),
 		Value: ev.Payload,
@@ -67,7 +67,7 @@ func (w *Writer) WriteSubmitEvent(ctx context.Context, ev *event.TaskSubmitEvent
 	return nil
 }
 
-func (w *Writer) WriteStatusEvent(ctx context.Context, ev *event.TaskStatusEvent) error {
+func (w *Writer) WriteStatusEvent(ctx context.Context, ev *event.StatusEvent) error {
 	msg := kafka.Message{
 		Key:   []byte(ev.TaskID),
 		Value: ev.Payload,

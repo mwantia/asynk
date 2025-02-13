@@ -8,11 +8,11 @@ import (
 )
 
 type Handler interface {
-	ProcessSubmitEvent(context.Context, *kafka.Client, *event.TaskSubmitEvent) error
+	ProcessSubmitEvent(context.Context, *kafka.Client, *event.SubmitEvent) error
 }
 
-type HandlerFunc func(context.Context, *kafka.Client, *event.TaskSubmitEvent) error
+type HandlerFunc func(context.Context, *kafka.Client, *event.SubmitEvent) error
 
-func (fn HandlerFunc) ProcessSubmitEvent(ctx context.Context, c *kafka.Client, t *event.TaskSubmitEvent) error {
+func (fn HandlerFunc) ProcessSubmitEvent(ctx context.Context, c *kafka.Client, t *event.SubmitEvent) error {
 	return fn(ctx, c, t)
 }

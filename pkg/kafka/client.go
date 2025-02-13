@@ -8,18 +8,19 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/mwantia/asynk/pkg/options"
 	"github.com/segmentio/kafka-go"
 )
 
 type Client struct {
 	mutex    sync.RWMutex
-	options  Options
+	options  options.ClientOptions
 	conn     *kafka.Conn
 	cleanups []func() error
 }
 
-func New(opts ...Option) (*Client, error) {
-	options := DefaultOptions()
+func New(opts ...options.ClientOption) (*Client, error) {
+	options := options.DefaultClientOptions()
 	for _, opt := range opts {
 		if err := opt(&options); err != nil {
 			return nil, err
@@ -88,27 +89,34 @@ func (c *Client) fullTopic(topic string) string {
 	return text.String()
 }
 
-func (c *Client) CreateTopics(ctx context.Context, topics ...string) error {
+func (c *Client) CreateTopic(ctx context.Context, topic string, opts ...options.TopicOption) error {
 	conn, err := c.dial(ctx)
 	if err != nil {
 		return fmt.Errorf("error during dial: %w", err)
 	}
-	defer conn.Close()
 
-	configs := make([]kafka.TopicConfig, 0, len(topics))
-	for _, topic := range topics {
-		configs = append(configs, kafka.TopicConfig{
-			Topic:             c.fullTopic(topic),
-			NumPartitions:     1,
-			ReplicationFactor: 1,
-			ConfigEntries: []kafka.ConfigEntry{
-				{
-					ConfigName:  "retention.ms",
-					ConfigValue: "604800000",
-				},
-			},
-		})
+	options := options.DefaultTopicOptions()
+	for _, opt := range opts {
+		if err := opt(&options); err != nil {
+			return err
+		}
 	}
 
-	return conn.CreateTopics(configs...)
+	config := kafka.TopicConfig{
+		Topic:             c.fullTopic(topic),
+		NumPartitions:     options.NumPartitions,
+		ReplicationFactor: options.ReplicationFactor,
+		ConfigEntries: []kafka.ConfigEntry{
+			{
+				ConfigName:  "retention.ms",
+				ConfigValue: fmt.Sprintf("%d", options.RetentionTime.Milliseconds()),
+			},
+			{
+				ConfigName:  "retention.bytes",
+				ConfigValue: fmt.Sprintf("%d", options.RetentionBytes),
+			},
+		},
+	}
+
+	return conn.CreateTopics(config)
 }
