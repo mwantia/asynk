@@ -11,7 +11,7 @@ import (
 	"github.com/mwantia/asynk/pkg/event"
 	"github.com/mwantia/asynk/pkg/kafka"
 	"github.com/mwantia/asynk/pkg/options"
-	"github.com/mwantia/asynk/pkg/worker"
+	"github.com/mwantia/asynk/pkg/server"
 )
 
 const (
@@ -40,7 +40,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	w, err := worker.New(
+	srv, err := server.NewServer(
 		options.WithBrokers("kafka:9092"),
 		options.WithPool("debug"),
 		options.WithGroupID("group1"),
@@ -51,10 +51,10 @@ func main() {
 
 	log.Println("Running worker...")
 
-	mux := worker.NewServeMux()
+	mux := server.NewServeMux()
 	mux.HandleFunc(MockTopic, HandleMock)
 
-	if err := w.Run(ctx, mux); err != nil {
+	if err := srv.ServeMutex(ctx, mux); err != nil {
 		panic(err)
 	}
 

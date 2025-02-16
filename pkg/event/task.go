@@ -22,8 +22,6 @@ type StatusEvent struct {
 	Metadata Metadata        `json:"metadata,omitempty"`
 }
 
-type Metadata map[string]string
-
 func NewSubmitEvent(v interface{}) (*SubmitEvent, error) {
 	var buf [16]byte
 	_, err := rand.Read(buf[:])

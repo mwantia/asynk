@@ -32,6 +32,21 @@ func New(opts ...options.ClientOption) (*Client, error) {
 	}, nil
 }
 
+func (c *Client) Session(ctx context.Context, suffix string, opts ...options.TopicOption) (*Session, error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if err := c.CreateTopic(ctx, suffix, opts...); err != nil {
+		return nil, err
+	}
+
+	return &Session{
+		suffix:  suffix,
+		client:  c,
+		options: opts,
+	}, nil
+}
+
 func (c *Client) Cleanup() error {
 	if len(c.cleanups) == 0 {
 		return nil

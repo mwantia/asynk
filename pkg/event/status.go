@@ -8,6 +8,8 @@ const (
 	StatusRunning  Status = "running"
 	StatusComplete Status = "complete"
 	StatusFailed   Status = "failed"
+	StatusRetry    Status = "retry"
+	StatusArchived Status = "archived"
 )
 
 func (s Status) String() string {
@@ -15,5 +17,5 @@ func (s Status) String() string {
 }
 
 func (s Status) IsTerminal() bool {
-	return s == StatusComplete || s == StatusFailed
+	return s == StatusComplete || s == StatusFailed || s == StatusArchived
 }

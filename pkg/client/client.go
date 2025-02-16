@@ -50,6 +50,10 @@ func New(suffix string, opts ...options.ClientOption) (*Client, error) {
 	}, nil
 }
 
+func (c *Client) Archive(ctx context.Context, ev *event.SubmitEvent, reason string) error {
+	return nil
+}
+
 func (c *Client) Submit(ctx context.Context, ev *event.SubmitEvent) (chan event.StatusEvent, error) {
 	if err := c.writer.WriteSubmitEvent(ctx, ev); err != nil {
 		return nil, fmt.Errorf("failed to submit task: %w", err)
