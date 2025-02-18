@@ -3,9 +3,11 @@ package server
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/mwantia/asynk/internal/kafka"
 	"github.com/mwantia/asynk/pkg/event"
-	"github.com/mwantia/asynk/pkg/kafka"
+	"github.com/mwantia/asynk/pkg/options"
 )
 
 type Worker struct {
@@ -19,32 +21,38 @@ func NewWorker(session *kafka.Session) (*Worker, error) {
 }
 
 func (w *Worker) Process(ctx context.Context, handler Handler) error {
+	if err := w.session.CreateTopic(ctx, "events.submit",
+		options.WithRetentionTime(time.Hour*24),
+	); err != nil {
+		return fmt.Errorf("failed to create topic '%s': %w", "events.submit", err)
+	}
+
+	if err := w.session.CreateTopic(ctx, "events.status",
+		options.WithRetentionTime(time.Hour*2),
+	); err != nil {
+		return fmt.Errorf("failed to create topic '%s': %w", "events.status", err)
+	}
+
+	reader, err := w.session.GetReader("events.submit")
+	if err != nil {
+		return fmt.Errorf("failed to get kafka reader: %w", err)
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 		default:
-			msg, err := w.session.ReadMessage(ctx, "events.submit")
-			if err != nil {
-				return fmt.Errorf("failed to read submit message: %w", err)
+			ev := &event.SubmitEvent{}
+			if err := reader.ReadEvent(ctx, ev); err != nil {
+				return fmt.Errorf("failed to read kafka message: %w", err)
 			}
 
-			ev := &event.SubmitEvent{
-				ID:       string(msg.Key),
-				Payload:  msg.Value,
-				Metadata: make(event.Metadata),
-			}
-			for _, header := range msg.Headers {
-				switch header.Key {
-				case "id":
-					ev.ID = string(header.Value)
-				case "type":
-					ev.Type = event.EventType(header.Value)
-				default:
-					ev.Metadata[header.Key] = string(header.Value)
-				}
+			pipeline := &Pipeline{
+				session: w.session,
+				submit:  ev,
 			}
 
-			if err := handler.ProcessSubmitEvent(ctx, nil, ev); err != nil {
+			if err := handler.ProcessPipeline(ctx, pipeline); err != nil {
 				return fmt.Errorf("failed to process submit event: %w", err)
 			}
 		}

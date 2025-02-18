@@ -32,11 +32,17 @@ func main() {
 
 	log.Println("Submitting new task with mock data...")
 
-	ev, _ := event.NewSubmitEvent(MockData{
+	payload, err := json.Marshal(MockData{
 		Content: "Hello World",
 	})
+	if err != nil {
+		panic(err)
+	}
 
-	streams, err := c.Submit(context.Background(), ev)
+	streams, err := c.Submit(context.Background(), event.SubmitEvent{
+		ID:      event.UUIDv7(),
+		Payload: payload,
+	})
 	if err != nil {
 		panic(err)
 	}

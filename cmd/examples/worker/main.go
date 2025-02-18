@@ -3,13 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"strings"
 
 	"github.com/mwantia/asynk/pkg/event"
-	"github.com/mwantia/asynk/pkg/kafka"
 	"github.com/mwantia/asynk/pkg/options"
 	"github.com/mwantia/asynk/pkg/server"
 )
@@ -55,22 +55,23 @@ func main() {
 	mux.HandleFunc(MockTopic, HandleMock)
 
 	if err := srv.ServeMutex(ctx, mux); err != nil {
-		panic(err)
+		// Ignore errors when the context has been cancelled
+		if ctx.Err() == nil {
+			panic(err)
+		}
 	}
 
 	log.Println("Worker cleanup completed...")
 }
 
-func HandleMock(ctx context.Context, c *kafka.Client, ev *event.SubmitEvent) error {
+func HandleMock(ctx context.Context, p *server.Pipeline) error {
 	var data MockData
-	if err := json.Unmarshal(ev.Payload, &data); err != nil {
+	if err := json.Unmarshal(p.Submit().Payload, &data); err != nil {
 		return err
 	}
 
-	log.Printf("New task '%s' received with mock data:\n", ev.ID)
+	log.Printf("New task '%s' received with mock data:\n", p.Submit().ID)
 	log.Println(data.Content)
-
-	writer := c.NewWriter(MockTopic + ".tasks.status")
 
 	log.Println("Performing work for mock...")
 
@@ -78,33 +79,27 @@ func HandleMock(ctx context.Context, c *kafka.Client, ev *event.SubmitEvent) err
 	for _, word := range words {
 		select {
 		case <-ctx.Done():
-			return writer.WriteStatusEvent(ctx, &event.StatusEvent{
-				TaskID: ev.ID,
-				Status: event.StatusLost,
-			})
+			return p.Done(ctx, event.StatusLost)
 		default:
-			payload, err := json.Marshal(MockData{
+			data := MockData{
 				Content: word + " ",
-			})
-			if err != nil {
-				return err
 			}
 
-			err = writer.WriteStatusEvent(ctx, &event.StatusEvent{
-				TaskID:  ev.ID,
+			payload, err := json.Marshal(data)
+			if err != nil {
+				return fmt.Errorf("failed to marshal data: %w", err)
+			}
+
+			if err := p.Status(ctx, &event.StatusEvent{
 				Status:  event.StatusRunning,
 				Payload: payload,
-			})
-			if err != nil {
-				return err
+			}); err != nil {
+				return fmt.Errorf("failed to update status: %w", err)
 			}
 		}
 	}
 
 	log.Println("Work has been completed...")
 
-	return writer.WriteStatusEvent(ctx, &event.StatusEvent{
-		TaskID: ev.ID,
-		Status: event.StatusComplete,
-	})
+	return p.Done(ctx, event.StatusComplete)
 }

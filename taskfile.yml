@@ -11,7 +11,7 @@ tasks:
       - task: setup
       - go run cmd/examples/worker/main.go
 
-  streaming:
+  streamer:
     cmds:
       - task: setup
       - go run cmd/examples/streaming/main.go

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 
@@ -32,18 +31,16 @@ func New(opts ...options.ClientOption) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) Session(ctx context.Context, suffix string, opts ...options.TopicOption) (*Session, error) {
+func (c *Client) Session(ctx context.Context, suffix string) (*Session, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if err := c.CreateTopic(ctx, suffix, opts...); err != nil {
-		return nil, err
-	}
-
 	return &Session{
-		suffix:  suffix,
-		client:  c,
-		options: opts,
+		suffix:   suffix,
+		client:   c,
+		readers:  make(map[string]*Reader),
+		writers:  make(map[string]*Writer),
+		cleanups: make([]func() error, 0),
 	}, nil
 }
 
@@ -102,36 +99,4 @@ func (c *Client) fullTopic(topic string) string {
 
 	text.WriteString(topic)
 	return text.String()
-}
-
-func (c *Client) CreateTopic(ctx context.Context, topic string, opts ...options.TopicOption) error {
-	conn, err := c.dial(ctx)
-	if err != nil {
-		return fmt.Errorf("error during dial: %w", err)
-	}
-
-	options := options.DefaultTopicOptions()
-	for _, opt := range opts {
-		if err := opt(&options); err != nil {
-			return err
-		}
-	}
-
-	config := kafka.TopicConfig{
-		Topic:             c.fullTopic(topic),
-		NumPartitions:     options.NumPartitions,
-		ReplicationFactor: options.ReplicationFactor,
-		ConfigEntries: []kafka.ConfigEntry{
-			{
-				ConfigName:  "retention.ms",
-				ConfigValue: fmt.Sprintf("%d", options.RetentionTime.Milliseconds()),
-			},
-			{
-				ConfigName:  "retention.bytes",
-				ConfigValue: fmt.Sprintf("%d", options.RetentionBytes),
-			},
-		},
-	}
-
-	return conn.CreateTopics(config)
 }

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/mwantia/asynk/pkg/kafka"
+	"github.com/mwantia/asynk/internal/kafka"
 	"github.com/mwantia/asynk/pkg/options"
 )
 

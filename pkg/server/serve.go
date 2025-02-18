@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-
-	"github.com/mwantia/asynk/pkg/event"
-	"github.com/mwantia/asynk/pkg/kafka"
 )
 
 type ServeMux struct {
@@ -21,13 +18,13 @@ type serveMuxEntry struct {
 }
 
 type Handler interface {
-	ProcessSubmitEvent(context.Context, *kafka.Client, *event.SubmitEvent) error
+	ProcessPipeline(context.Context, *Pipeline) error
 }
 
-type HandlerFunc func(context.Context, *kafka.Client, *event.SubmitEvent) error
+type HandlerFunc func(context.Context, *Pipeline) error
 
-func (fn HandlerFunc) ProcessSubmitEvent(ctx context.Context, c *kafka.Client, t *event.SubmitEvent) error {
-	return fn(ctx, c, t)
+func (fn HandlerFunc) ProcessPipeline(ctx context.Context, p *Pipeline) error {
+	return fn(ctx, p)
 }
 
 func NewServeMux() *ServeMux {
@@ -59,7 +56,7 @@ func (mux *ServeMux) Handle(topic string, handler Handler) error {
 	return nil
 }
 
-func (mux *ServeMux) HandleFunc(topic string, handler func(context.Context, *kafka.Client, *event.SubmitEvent) error) error {
+func (mux *ServeMux) HandleFunc(topic string, handler func(context.Context, *Pipeline) error) error {
 	if handler == nil {
 		return fmt.Errorf("invalid handler")
 	}
@@ -67,13 +64,13 @@ func (mux *ServeMux) HandleFunc(topic string, handler func(context.Context, *kaf
 	return mux.Handle(topic, HandlerFunc(handler))
 }
 
-func (mux *ServeMux) ProcessSubmitEvent(ctx context.Context, c *kafka.Client, ev *event.SubmitEvent) error {
+func (mux *ServeMux) ProcessPipeline(ctx context.Context, p *Pipeline) error {
 	mux.mutex.RLock()
 	defer mux.mutex.RUnlock()
 
 	handler, exist := mux.handlers[""]
 	if exist {
-		return handler.handler.ProcessSubmitEvent(ctx, c, ev)
+		return handler.handler.ProcessPipeline(ctx, p)
 	}
 
 	return fmt.Errorf("topic not found")
