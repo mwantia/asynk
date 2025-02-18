@@ -3,15 +3,15 @@ package server
 import (
 	"context"
 	"fmt"
-	"time"
+	"sync"
 
 	"github.com/mwantia/asynk/internal/kafka"
-	"github.com/mwantia/asynk/pkg/event"
-	"github.com/mwantia/asynk/pkg/options"
 )
 
 type Worker struct {
 	session *kafka.Session
+	running sync.WaitGroup
+	cancel  context.CancelFunc
 }
 
 func NewWorker(session *kafka.Session) (*Worker, error) {
@@ -20,41 +20,21 @@ func NewWorker(session *kafka.Session) (*Worker, error) {
 	}, nil
 }
 
-func (w *Worker) Process(ctx context.Context, handler Handler) error {
-	if err := w.session.CreateTopic(ctx, "events.submit",
-		options.WithRetentionTime(time.Hour*24),
-	); err != nil {
-		return fmt.Errorf("failed to create topic '%s': %w", "events.submit", err)
+func (w *Worker) Shutdown(ctx context.Context) error {
+	if w.cancel != nil {
+		w.cancel()
 	}
 
-	if err := w.session.CreateTopic(ctx, "events.status",
-		options.WithRetentionTime(time.Hour*2),
-	); err != nil {
-		return fmt.Errorf("failed to create topic '%s': %w", "events.status", err)
-	}
+	done := make(chan struct{})
+	go func() {
+		w.running.Wait()
+		close(done)
+	}()
 
-	reader, err := w.session.GetReader("events.submit")
-	if err != nil {
-		return fmt.Errorf("failed to get kafka reader: %w", err)
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-		default:
-			ev := &event.SubmitEvent{}
-			if err := reader.ReadEvent(ctx, ev); err != nil {
-				return fmt.Errorf("failed to read kafka message: %w", err)
-			}
-
-			pipeline := &Pipeline{
-				session: w.session,
-				submit:  ev,
-			}
-
-			if err := handler.ProcessPipeline(ctx, pipeline); err != nil {
-				return fmt.Errorf("failed to process submit event: %w", err)
-			}
-		}
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("shutdown timeout exceeded")
 	}
 }

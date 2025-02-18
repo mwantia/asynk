@@ -2,17 +2,21 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"log"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/mwantia/asynk/internal/kafka"
 	"github.com/mwantia/asynk/pkg/options"
 )
 
 type Server struct {
-	mutex  sync.RWMutex
-	client *kafka.Client
+	mutex   sync.RWMutex
+	client  *kafka.Client
+	workers map[string]*Worker
+	active  atomic.Bool
 }
 
 func NewServer(opts ...options.ClientOption) (*Server, error) {
@@ -22,53 +26,58 @@ func NewServer(opts ...options.ClientOption) (*Server, error) {
 	}
 
 	return &Server{
-		client: client,
+		client:  client,
+		workers: make(map[string]*Worker),
 	}, nil
 }
 
 func (s *Server) ServeMutex(ctx context.Context, mux *ServeMux) error {
+	if !s.active.CompareAndSwap(false, true) {
+		return fmt.Errorf("server is already running")
+	}
+	defer s.active.Store(false)
+
 	var wg sync.WaitGroup
-	var errs []error
+	errs := &Errors{}
 
 	for suffix, handler := range mux.handlers {
-
-		session, err := s.client.Session(ctx, suffix)
-		if err != nil {
-			e := fmt.Errorf("failed to create session for suffix '%s': %w", suffix, err)
-			errs = append(errs, e)
-			continue
-		}
-
-		worker, err := NewWorker(session)
-		if err != nil {
-			e := fmt.Errorf("failed to create worker for suffix '%s': %w", suffix, err)
-			errs = append(errs, e)
-			continue
-		}
-
 		wg.Add(1)
 
-		go func(w *Worker) {
-			if err := w.Process(ctx, handler.handler); err != nil {
-				e := fmt.Errorf("failed to process handler for suffix '%s': %w", suffix, err)
-				errs = append(errs, e)
-			}
-
+		go func(suffix string, handler Handler) {
 			defer wg.Done()
-		}(worker)
+
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					if err := s.runWorker(ctx, suffix, handler); err != nil {
+						log.Printf("%v", err)
+						time.Sleep(time.Second * 10)
+						continue
+					}
+				}
+			}
+		}(suffix, handler.handler)
 	}
 
 	<-ctx.Done()
+
+	s.mutex.Lock()
+	for _, worker := range s.workers {
+		if err := worker.Shutdown(ctx); err != nil {
+			errs.Add(fmt.Errorf("failed to shutdown worker: %w", err))
+		}
+	}
+	// Reset list of running workers
+	s.workers = make(map[string]*Worker)
+	s.mutex.Unlock()
+
 	wg.Wait()
 
 	if err := s.client.Cleanup(); err != nil {
-		e := fmt.Errorf("failed to perform client cleanup: %w", err)
-		errs = append(errs, e)
+		errs.Add(fmt.Errorf("failed to perform client cleanup: %w", err))
 	}
 
-	if len(errs) > 0 {
-		return errors.Join(errs...)
-	}
-
-	return nil
+	return errs.Errors()
 }
