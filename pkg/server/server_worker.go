@@ -6,7 +6,7 @@ import (
 )
 
 func (s *Server) runWorker(ctx context.Context, suffix string, handler Handler) error {
-	session, err := s.client.Session(ctx, suffix)
+	session, err := s.client.Session(suffix)
 	if err != nil {
 		return fmt.Errorf("failed to create session for suffix '%s': %w", suffix, err)
 	}

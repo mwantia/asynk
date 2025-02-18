@@ -16,25 +16,23 @@ type Client struct {
 	client  *kafka.Client
 	session *kafka.Session
 	events  map[string]chan *event.StatusEvent
-	channel chan event.StatusEvent
 	mutex   sync.RWMutex
 }
 
-func New(suffix string, opts ...options.ClientOption) (*Client, error) {
+func NewClient(suffix string, opts ...options.ClientOption) (*Client, error) {
 	client, err := kafka.New(opts...)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx := context.Background()
-
-	session, err := client.Session(ctx, suffix)
+	session, err := client.Session(suffix)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kafka session: %w", err)
 	}
 
-	// Ensure topics exist
-	if err := session.CreateTopic(ctx, "events.submit",
+	// I don't think clients should share the responsibility of creating topics
+
+	/* if err := session.CreateTopic(ctx, "events.submit",
 		options.WithRetentionTime(time.Hour*24),
 	); err != nil {
 		return nil, err
@@ -43,14 +41,13 @@ func New(suffix string, opts ...options.ClientOption) (*Client, error) {
 		options.WithRetentionTime(time.Hour*2),
 	); err != nil {
 		return nil, err
-	}
+	} */
 
 	return &Client{
 		suffix:  suffix,
 		client:  client,
 		session: session,
 		events:  make(map[string]chan *event.StatusEvent),
-		channel: make(chan event.StatusEvent, 100),
 	}, nil
 }
 
@@ -59,18 +56,22 @@ func (c *Client) Archive(ctx context.Context, ev *event.SubmitEvent, reason stri
 }
 
 func (c *Client) Submit(ctx context.Context, ev event.SubmitEvent) (chan *event.StatusEvent, error) {
+	if ev.ID == "" {
+		ev.ID = event.UUIDv7()
+	}
+
 	writer, err := c.session.GetWriter("events.submit")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kafka writer: %w", err)
 	}
 
+	if err := writer.WriteEvent(ctx, &ev); err != nil {
+		return nil, fmt.Errorf("failed to write kafka message: %w", err)
+	}
+
 	reader, err := c.session.GetReader("events.status")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kafka reader: %w", err)
-	}
-
-	if err := writer.WriteEvent(ctx, &ev); err != nil {
-		return nil, fmt.Errorf("failed to write kafka message: %w", err)
 	}
 
 	c.mutex.Lock()
@@ -87,22 +88,25 @@ func (c *Client) Submit(ctx context.Context, ev event.SubmitEvent) (chan *event.
 		}()
 
 		for {
-			evs := &event.StatusEvent{}
-			if err := reader.ReadEvent(ctx, evs); err != nil {
-				if ctx.Err() != nil {
-					return
-				}
-				continue
-			}
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				evs := &event.StatusEvent{}
+				if err := reader.ReadEvent(ctx, evs); err != nil {
+					if ctx.Err() != nil {
+						return
+					}
 
-			if evs.ID == ev.ID {
-				select {
-				case channel <- evs:
+					time.Sleep(time.Second * 2)
+					continue
+				}
+
+				if evs.ID == ev.ID {
+					channel <- evs
 					if evs.Status.IsTerminal() {
 						return
 					}
-				case <-ctx.Done():
-					return
 				}
 			}
 		}
@@ -113,12 +117,11 @@ func (c *Client) Submit(ctx context.Context, ev event.SubmitEvent) (chan *event.
 
 func (c *Client) Close() error {
 	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
 	for _, channel := range c.events {
 		close(channel)
 	}
 	c.events = make(map[string]chan *event.StatusEvent)
+	c.mutex.Unlock()
 
 	return c.client.Cleanup()
 }

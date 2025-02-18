@@ -31,7 +31,7 @@ func New(opts ...options.ClientOption) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) Session(ctx context.Context, suffix string) (*Session, error) {
+func (c *Client) Session(suffix string) (*Session, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 

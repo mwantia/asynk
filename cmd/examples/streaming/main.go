@@ -20,7 +20,7 @@ type MockData struct {
 }
 
 func main() {
-	c, err := client.New(MockTopic,
+	c, err := client.NewClient(MockTopic,
 		options.WithBrokers("kafka:9092"),
 		options.WithPool("debug"),
 	)
