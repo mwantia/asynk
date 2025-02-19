@@ -3,16 +3,18 @@ package server
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/mwantia/asynk/internal/kafka"
+	log_internal "github.com/mwantia/asynk/internal/log"
+	"github.com/mwantia/asynk/pkg/log"
 	"github.com/mwantia/asynk/pkg/options"
 )
 
 type Server struct {
+	logger  log.Logger
 	mutex   sync.RWMutex
 	client  *kafka.Client
 	workers map[string]*Worker
@@ -25,7 +27,11 @@ func NewServer(opts ...options.ClientOption) (*Server, error) {
 		return nil, fmt.Errorf("failed to create kafka client: %w", err)
 	}
 
+	logger := log_internal.NewLogger("DEBUG")
+	logger.Debug("Created new server")
+
 	return &Server{
+		logger:  logger,
 		client:  client,
 		workers: make(map[string]*Worker),
 	}, nil
@@ -52,7 +58,7 @@ func (s *Server) ServeMutex(ctx context.Context, mux *ServeMux) error {
 					return
 				default:
 					if err := s.runWorker(ctx, suffix, handler); err != nil {
-						log.Printf("%v", err)
+						s.logger.Warn("Error during working execution: %v", err)
 						time.Sleep(time.Second * 10)
 						continue
 					}

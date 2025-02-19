@@ -10,6 +10,7 @@ const (
 	DefaultGroupID     = ""
 	DefaultTopicPrefix = "asynk"
 	DefaultPool        = "default"
+	DefaultLogLevel    = "INFO"
 
 	DefaultMaxWait         = time.Millisecond * 50
 	DefaultCommitInterval  = time.Millisecond * 100
@@ -29,6 +30,7 @@ type ClientOptions struct {
 	GroupID         string        `json:"group_id,omitempty"`
 	TopicPrefix     string        `json:"topic_prefix,omitempty"`
 	Pool            string        `json:"pool,omitempty"`
+	LogLevel        string        `json:"log_level,omitempty"`
 	MaxWait         time.Duration `json:"max_wait,omitempty"`
 	CommitInterval  time.Duration `json:"commit_interval,omitempty"`
 	MinBytes        int64         `json:"min_bytes,omitempty"`
@@ -50,6 +52,7 @@ func DefaultClientOptions() ClientOptions {
 		GroupID:         DefaultGroupID,
 		TopicPrefix:     DefaultTopicPrefix,
 		Pool:            DefaultPool,
+		LogLevel:        DefaultLogLevel,
 		MaxWait:         DefaultMaxWait,
 		CommitInterval:  DefaultCommitInterval,
 		MinBytes:        DefaultMinBytes,
@@ -96,6 +99,13 @@ func WithTopicPrefix(topicPrefix string) ClientOption {
 func WithPool(pool string) ClientOption {
 	return func(o *ClientOptions) error {
 		o.Pool = pool
+		return nil
+	}
+}
+
+func WithLogLevel(logLevel string) ClientOption {
+	return func(o *ClientOptions) error {
+		o.LogLevel = logLevel
 		return nil
 	}
 }
