@@ -7,12 +7,15 @@ import (
 	"time"
 
 	"github.com/mwantia/asynk/internal/kafka"
+	basic "github.com/mwantia/asynk/internal/log"
 	"github.com/mwantia/asynk/pkg/event"
+	"github.com/mwantia/asynk/pkg/log"
 	"github.com/mwantia/asynk/pkg/options"
 )
 
 type Client struct {
 	suffix  string
+	logger  log.LogWrapper
 	client  *kafka.Client
 	session *kafka.Session
 	events  map[string]chan *event.StatusEvent
@@ -20,7 +23,16 @@ type Client struct {
 }
 
 func NewClient(suffix string, opts ...options.ClientOption) (*Client, error) {
-	client, err := kafka.New(opts...)
+	options := options.DefaultClientOptions()
+	for _, opt := range opts {
+		if err := opt(&options); err != nil {
+			return nil, err
+		}
+	}
+
+	logger := basic.NewBasic(options.LogLevel)
+
+	client, err := kafka.NewKafka(options, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -45,6 +57,7 @@ func NewClient(suffix string, opts ...options.ClientOption) (*Client, error) {
 
 	return &Client{
 		suffix:  suffix,
+		logger:  logger.Named("client"),
 		client:  client,
 		session: session,
 		events:  make(map[string]chan *event.StatusEvent),

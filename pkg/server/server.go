@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/mwantia/asynk/internal/kafka"
-	log_internal "github.com/mwantia/asynk/internal/log"
+	basic "github.com/mwantia/asynk/internal/log"
 	"github.com/mwantia/asynk/pkg/log"
 	"github.com/mwantia/asynk/pkg/options"
 )
 
 type Server struct {
-	logger  log.Logger
+	logger  log.LogWrapper
 	mutex   sync.RWMutex
 	client  *kafka.Client
 	workers map[string]*Worker
@@ -22,16 +22,22 @@ type Server struct {
 }
 
 func NewServer(opts ...options.ClientOption) (*Server, error) {
-	client, err := kafka.New(opts...)
+	options := options.DefaultClientOptions()
+	for _, opt := range opts {
+		if err := opt(&options); err != nil {
+			return nil, err
+		}
+	}
+
+	logger := basic.NewBasic(options.LogLevel)
+
+	client, err := kafka.NewKafka(options, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kafka client: %w", err)
 	}
 
-	logger := log_internal.NewLogger("DEBUG")
-	logger.Debug("Created new server")
-
 	return &Server{
-		logger:  logger,
+		logger:  logger.Named("server"),
 		client:  client,
 		workers: make(map[string]*Worker),
 	}, nil

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/mwantia/asynk/pkg/log"
 	"github.com/mwantia/asynk/pkg/options"
 	"github.com/segmentio/kafka-go"
 )
@@ -13,6 +14,7 @@ import (
 type Session struct {
 	mutex  sync.RWMutex
 	client *Client
+	logger log.LogWrapper
 	suffix string
 
 	readers  map[string]*Reader
@@ -36,6 +38,8 @@ func (s *Session) CreateTopic(ctx context.Context, topic string, opts ...options
 			return err
 		}
 	}
+
+	s.logger.Info("Creating new topic '%s'", topic)
 
 	config := kafka.TopicConfig{
 		Topic:             s.fullTopic(topic),
@@ -61,6 +65,7 @@ func (s *Session) GetReader(suffix string) (*Reader, error) {
 	defer s.mutex.Unlock()
 
 	if reader, exist := s.readers[suffix]; exist {
+		s.logger.Debug("Returning existing reader for suffix '%s'", suffix)
 		return reader, nil
 	}
 
@@ -75,7 +80,10 @@ func (s *Session) GetReader(suffix string) (*Reader, error) {
 			MaxBytes:         int(s.client.options.MaxBytes),
 			ReadBatchTimeout: s.client.options.BatchTimeout,
 		}),
+		logger: s.logger.Named("kafka/reader"),
 	}
+
+	s.logger.Debug("Creating new reader for suffix '%s'", suffix)
 
 	s.readers[suffix] = reader
 	s.client.cleanups = append(s.cleanups, reader.reader.Close)
@@ -88,6 +96,7 @@ func (s *Session) GetWriter(suffix string) (*Writer, error) {
 	defer s.mutex.Unlock()
 
 	if writer, exist := s.writers[suffix]; exist {
+		s.logger.Debug("Returning existing writer for suffix '%s'", suffix)
 		return writer, nil
 	}
 
@@ -101,7 +110,10 @@ func (s *Session) GetWriter(suffix string) (*Writer, error) {
 			BatchBytes:   s.client.options.BatchBytes,
 			Async:        s.client.options.Async,
 		},
+		logger: s.logger.Named("kafka/writer"),
 	}
+
+	s.logger.Debug("Creating new writer for suffix '%s'", suffix)
 
 	s.writers[suffix] = writer
 	s.client.cleanups = append(s.cleanups, writer.writer.Close)
@@ -122,6 +134,8 @@ func (s *Session) fullTopic(suffix string) string {
 	if suffix != "" {
 		text.WriteString("." + suffix)
 	}
+
+	s.logger.Debug("Returning full topic creation for '%s'", text.String())
 
 	return text.String()
 }

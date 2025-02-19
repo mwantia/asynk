@@ -7,33 +7,22 @@ import (
 	"strings"
 	"sync"
 
-	log_internal "github.com/mwantia/asynk/internal/log"
 	"github.com/mwantia/asynk/pkg/log"
 	"github.com/mwantia/asynk/pkg/options"
 	"github.com/segmentio/kafka-go"
 )
 
 type Client struct {
-	logger   log.Logger
 	mutex    sync.RWMutex
+	logger   log.LogWrapper
 	options  options.ClientOptions
 	conn     *kafka.Conn
 	cleanups []func() error
 }
 
-func New(opts ...options.ClientOption) (*Client, error) {
-	options := options.DefaultClientOptions()
-	for _, opt := range opts {
-		if err := opt(&options); err != nil {
-			return nil, err
-		}
-	}
-
-	logger := log_internal.NewLogger(options.LogLevel)
-	logger.Debug("Created new kafka client")
-
+func NewKafka(options options.ClientOptions, logger log.LogWrapper) (*Client, error) {
 	return &Client{
-		logger:  logger,
+		logger:  logger.Named("kafka/client"),
 		options: options,
 	}, nil
 }
@@ -47,6 +36,7 @@ func (c *Client) Session(suffix string) (*Session, error) {
 	return &Session{
 		suffix:   suffix,
 		client:   c,
+		logger:   c.logger.Named("kafka/session"),
 		readers:  make(map[string]*Reader),
 		writers:  make(map[string]*Writer),
 		cleanups: make([]func() error, 0),
@@ -66,7 +56,7 @@ func (c *Client) Cleanup() error {
 	var errs []error
 
 	for i, cleanup := range c.cleanups {
-		c.logger.Debug("Executing cleanup number '%d'", i)
+		c.logger.Debug("Executing cleanup '%d'", i)
 
 		if err := cleanup(); err != nil {
 			errs = append(errs, err)

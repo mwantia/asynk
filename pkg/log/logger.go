@@ -1,6 +1,12 @@
 package log
 
-type Logger interface {
+type LogBase interface {
+	Log(level LogLevel, msg string, name string, args ...interface{})
+}
+
+type LogWrapper interface {
+	Base() LogBase
+
 	Debug(msg string, args ...interface{})
 
 	Info(msg string, args ...interface{})
@@ -11,7 +17,7 @@ type Logger interface {
 
 	Fatal(msg string, args ...interface{})
 
-	Named(name string) Logger
+	Named(name string) LogWrapper
 }
 
 type LogLevel int

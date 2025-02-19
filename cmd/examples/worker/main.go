@@ -49,8 +49,6 @@ func main() {
 		panic(err)
 	}
 
-	log.Println("Running worker...")
-
 	mux := server.NewServeMux()
 	mux.HandleFunc(MockTopic, HandleMock)
 
@@ -60,8 +58,6 @@ func main() {
 			panic(err)
 		}
 	}
-
-	log.Println("Worker cleanup completed...")
 }
 
 func HandleMock(ctx context.Context, p *server.Pipeline) error {
