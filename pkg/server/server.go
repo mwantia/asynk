@@ -32,11 +32,11 @@ func NewServer(opts ...options.ClientOption) (*Server, error) {
 	var logger log.LogWrapper
 
 	if options.Logger != nil {
-		logger = basic.NewNamed(*options.Logger, "client")
+		logger = basic.NewNamed(*options.Logger, "asynk/server")
 	}
 	if logger == nil {
 		l := basic.NewBasic(options.LogLevel)
-		logger = l.Named("client")
+		logger = l.Named("asynk/server")
 	}
 
 	client, err := kafka.NewKafka(options, logger)
@@ -57,11 +57,15 @@ func (s *Server) ServeMutex(ctx context.Context, mux *ServeMux) error {
 	}
 	defer s.active.Store(false)
 
+	s.logger.Info("Starting server with '%d' handlers", len(mux.handlers))
+
 	var wg sync.WaitGroup
 	errs := &Errors{}
 
 	for suffix, handler := range mux.handlers {
 		wg.Add(1)
+
+		s.logger.Debug("Starting worker for topic '%s'", suffix)
 
 		go func(suffix string, handler Handler) {
 			defer wg.Done()
@@ -69,7 +73,9 @@ func (s *Server) ServeMutex(ctx context.Context, mux *ServeMux) error {
 			for {
 				select {
 				case <-ctx.Done():
+					s.logger.Debug("Context cancelled for topic '%s'", suffix)
 					return
+
 				default:
 					if err := s.runWorker(ctx, suffix, handler); err != nil {
 						s.logger.Warn("Error during working execution: %v", err)
@@ -81,6 +87,7 @@ func (s *Server) ServeMutex(ctx context.Context, mux *ServeMux) error {
 		}(suffix, handler.handler)
 	}
 
+	s.logger.Info("Server started successfully, waiting for context...")
 	<-ctx.Done()
 
 	s.mutex.Lock()
@@ -93,9 +100,11 @@ func (s *Server) ServeMutex(ctx context.Context, mux *ServeMux) error {
 	s.workers = make(map[string]*Worker)
 	s.mutex.Unlock()
 
+	s.logger.Info("Waiting for all worker goroutines to complete...")
 	wg.Wait()
 
 	if err := s.client.Cleanup(); err != nil {
+		s.logger.Error("Failed to cleanup Kafka client: %v", err)
 		errs.Add(fmt.Errorf("failed to perform client cleanup: %w", err))
 	}
 

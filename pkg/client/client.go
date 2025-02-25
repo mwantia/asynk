@@ -47,11 +47,11 @@ func NewClient(suffix string, opts ...options.ClientOption) (*Client, error) {
 	var logger log.LogWrapper
 
 	if options.Logger != nil {
-		logger = basic.NewNamed(*options.Logger, "client")
+		logger = basic.NewNamed(*options.Logger, "asynk/client")
 	}
 	if logger == nil {
 		l := basic.NewBasic(options.LogLevel)
-		logger = l.Named("client")
+		logger = l.Named("asynk/client")
 	}
 
 	k, err := kafka.NewKafka(options, logger)
@@ -95,6 +95,8 @@ func (c *Client) Submit(ctx context.Context, ev event.SubmitEvent) (chan *event.
 		return nil, fmt.Errorf("client has already been closed")
 	}
 
+	c.logger.Info("Submitting task '%s' to Kafka", ev.ID)
+
 	ctx, cancel := context.WithCancel(ctx)
 
 	go func() {
@@ -125,6 +127,8 @@ func (c *Client) Submit(ctx context.Context, ev event.SubmitEvent) (chan *event.
 		return nil, fmt.Errorf("failed to create kafka reader: %w", err)
 	}
 
+	c.logger.Debug("Creating status channel for task '%s'", ev.ID)
+
 	c.mutex.Lock()
 	ch := make(chan *event.StatusEvent, 100)
 	c.events[ev.ID] = ch
@@ -132,6 +136,7 @@ func (c *Client) Submit(ctx context.Context, ev event.SubmitEvent) (chan *event.
 
 	c.wait.Add(1)
 
+	c.logger.Debug("Started event processing goroutine for task '%s'", ev.ID)
 	go c.processEvent(ctx, ev.ID, reader, ch)
 
 	return ch, nil

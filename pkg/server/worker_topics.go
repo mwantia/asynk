@@ -9,6 +9,8 @@ import (
 )
 
 func (w *Worker) initializeTopic(ctx context.Context) error {
+	w.logger.Info("Initializing topics for worker")
+
 	if err := w.session.CreateTopic(ctx, "events.submit",
 		options.WithRetentionTime(time.Hour*24),
 	); err != nil {
@@ -21,5 +23,6 @@ func (w *Worker) initializeTopic(ctx context.Context) error {
 		return fmt.Errorf("failed to create topic '%s': %w", "events.status", err)
 	}
 
+	w.logger.Info("Topics initialized successfully")
 	return nil
 }

@@ -135,7 +135,5 @@ func (s *Session) fullTopic(suffix string) string {
 		text.WriteString("." + suffix)
 	}
 
-	s.logger.Debug("Returning full topic creation for '%s'", text.String())
-
 	return text.String()
 }

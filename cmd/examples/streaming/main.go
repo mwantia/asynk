@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/mwantia/asynk/pkg/client"
 	"github.com/mwantia/asynk/pkg/event"
@@ -23,6 +24,7 @@ func main() {
 	c, err := client.NewClient(MockTopic,
 		options.WithBrokers("kafka:9092"),
 		options.WithPool("debug"),
+		options.WithLogLevel("INFO"),
 	)
 	if err != nil {
 		panic(err)
@@ -49,6 +51,8 @@ func main() {
 
 	log.Println("Task submitted and waiting for status reports...")
 
+	var text strings.Builder
+
 	for stream := range streams {
 		if stream.Status.IsTerminal() {
 			log.Println("Task completed with payload...")
@@ -60,6 +64,8 @@ func main() {
 			panic(err)
 		}
 
-		fmt.Print(data.Content)
+		text.WriteString(data.Content)
 	}
+
+	fmt.Println("Content: " + text.String())
 }

@@ -13,7 +13,10 @@ func (w *Worker) processPipeline(ctx context.Context, p *Pipeline, h Handler) er
 	process, cancel := context.WithTimeout(ctx, time.Minute*5)
 	defer cancel()
 
+	w.logger.Debug("Processing pipeline for task '%s'", p.submit.ID)
+
 	if err := h.ProcessPipeline(process, p); err != nil {
+		w.logger.Error("Failed to process task '%s': %v", p.submit.ID, err)
 		errs := p.Status(ctx, &event.StatusEvent{
 			Status: event.StatusFailed,
 			Metadata: event.Metadata{
@@ -21,6 +24,7 @@ func (w *Worker) processPipeline(ctx context.Context, p *Pipeline, h Handler) er
 				event.MetadataLastAttempt: time.Now().Format(time.RFC3339),
 			},
 		})
+
 		if errs != nil {
 			return fmt.Errorf("failed to update status after error: %v (original error: %w)", errs, err)
 		}
@@ -37,12 +41,14 @@ func (w *Worker) processNextEvent(ctx context.Context, reader *kafka.Reader, h H
 	ev := &event.SubmitEvent{}
 	if err := reader.ReadEvent(ctx, ev); err != nil {
 		if timeout.Err() != nil {
+			w.logger.Debug("Timeout reading next event")
 			return nil
 		}
 		return fmt.Errorf("failed to read kafka message: %w", err)
 	}
 
 	return w.processPipeline(ctx, &Pipeline{
+		logger:  w.logger.Named("asynk/pipeline"),
 		session: w.session,
 		submit:  ev,
 	}, h)
@@ -51,6 +57,8 @@ func (w *Worker) processNextEvent(ctx context.Context, reader *kafka.Reader, h H
 func (w *Worker) Process(ctx context.Context, handler Handler) error {
 	processing, cancel := context.WithCancel(ctx)
 	w.cancel = cancel
+
+	w.logger.Info("Starting worker processing...")
 
 	if err := w.initializeTopic(ctx); err != nil {
 		return fmt.Errorf("failed to initialize topics: %w", err)
@@ -67,7 +75,9 @@ func (w *Worker) Process(ctx context.Context, handler Handler) error {
 	for {
 		select {
 		case <-ctx.Done():
+			w.logger.Info("Worker processing stopped")
 			return nil
+
 		default:
 			if err := w.processNextEvent(processing, reader, handler); err != nil {
 				fmt.Printf("Error processing event: %v\n", err)

@@ -11,12 +11,16 @@ import (
 func (c *Client) processEvent(ctx context.Context, id string, reader *kafka.Reader, ch chan *event.StatusEvent) {
 	lctx, cancel := context.WithCancel(c.ctx)
 
+	c.logger.Debug("Starting event processing for task '%s'", id)
+
 	defer c.wait.Done()
 	defer cancel()
 
 	defer func() {
 		c.mutex.Lock()
 		if _, exist := c.events[id]; exist {
+			c.logger.Debug("Closing channel for task '%s'", id)
+
 			delete(c.events, id)
 			close(ch)
 		}
@@ -46,6 +50,7 @@ func (c *Client) processEvent(ctx context.Context, id string, reader *kafka.Read
 					return
 
 				case <-ctx.Done():
+					c.logger.Debug("Context cancelled while waiting after error")
 					return
 
 				case <-time.After(time.Second * 2):
@@ -55,6 +60,8 @@ func (c *Client) processEvent(ctx context.Context, id string, reader *kafka.Read
 			}
 
 			if evs.ID == id {
+				c.logger.Debug("Received status update for task '%s': %s", id, evs.Status.String())
+
 				select {
 				case ch <- evs:
 					// Channel send successfully

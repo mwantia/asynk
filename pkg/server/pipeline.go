@@ -5,9 +5,11 @@ import (
 
 	"github.com/mwantia/asynk/internal/kafka"
 	"github.com/mwantia/asynk/pkg/event"
+	"github.com/mwantia/asynk/pkg/log"
 )
 
 type Pipeline struct {
+	logger  log.LogWrapper
 	session *kafka.Session
 	submit  *event.SubmitEvent
 }
@@ -17,8 +19,11 @@ func (p *Pipeline) Submit() *event.SubmitEvent {
 }
 
 func (p *Pipeline) Status(ctx context.Context, ev *event.StatusEvent) error {
+	p.logger.Debug("Updating status for task '%s' to '%s'", p.submit.ID, ev.Status)
+
 	writer, err := p.session.GetWriter("events.status")
 	if err != nil {
+		p.logger.Error("Failed to get status writer: %v", err)
 		return err
 	}
 
