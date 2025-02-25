@@ -29,7 +29,15 @@ func NewServer(opts ...options.ClientOption) (*Server, error) {
 		}
 	}
 
-	logger := basic.NewBasic(options.LogLevel)
+	var logger log.LogWrapper
+
+	if options.Logger != nil {
+		logger = basic.NewNamed(*options.Logger, "client")
+	}
+	if logger == nil {
+		l := basic.NewBasic(options.LogLevel)
+		logger = l.Named("client")
+	}
 
 	client, err := kafka.NewKafka(options, logger)
 	if err != nil {
@@ -37,7 +45,7 @@ func NewServer(opts ...options.ClientOption) (*Server, error) {
 	}
 
 	return &Server{
-		logger:  logger.Named("server"),
+		logger:  logger,
 		client:  client,
 		workers: make(map[string]*Worker),
 	}, nil

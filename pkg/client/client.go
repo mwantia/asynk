@@ -2,8 +2,11 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/mwantia/asynk/internal/kafka"
@@ -14,63 +17,98 @@ import (
 )
 
 type Client struct {
-	suffix  string
+	suffix string
+
+	options options.ClientOptions
 	logger  log.LogWrapper
-	client  *kafka.Client
 	session *kafka.Session
 	events  map[string]chan *event.StatusEvent
-	mutex   sync.RWMutex
+
+	mutex  sync.RWMutex
+	active atomic.Bool
+	ctx    context.Context
+	cancel context.CancelFunc
+	wait   sync.WaitGroup
 }
 
 func NewClient(suffix string, opts ...options.ClientOption) (*Client, error) {
+	suffix = strings.TrimSpace(suffix)
+	if suffix == "" {
+		return nil, errors.New("suffix cannot be empty")
+	}
+
 	options := options.DefaultClientOptions()
 	for _, opt := range opts {
 		if err := opt(&options); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to apply option: %w", err)
 		}
 	}
 
-	logger := basic.NewBasic(options.LogLevel)
+	var logger log.LogWrapper
 
-	client, err := kafka.NewKafka(options, logger)
-	if err != nil {
-		return nil, err
+	if options.Logger != nil {
+		logger = basic.NewNamed(*options.Logger, "client")
+	}
+	if logger == nil {
+		l := basic.NewBasic(options.LogLevel)
+		logger = l.Named("client")
 	}
 
-	session, err := client.Session(suffix)
+	k, err := kafka.NewKafka(options, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kafka client: %w", err)
+	}
+
+	s, err := k.Session(suffix)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kafka session: %w", err)
 	}
 
-	// I don't think clients should share the responsibility of creating topics
+	ctx, cancel := context.WithCancel(context.Background())
 
-	/* if err := session.CreateTopic(ctx, "events.submit",
-		options.WithRetentionTime(time.Hour*24),
-	); err != nil {
-		return nil, err
-	}
-	if err := session.CreateTopic(ctx, "events.status",
-		options.WithRetentionTime(time.Hour*2),
-	); err != nil {
-		return nil, err
-	} */
+	c := &Client{
+		suffix: suffix,
 
-	return &Client{
-		suffix:  suffix,
-		logger:  logger.Named("client"),
-		client:  client,
-		session: session,
+		options: options,
+		logger:  logger,
+		session: s,
 		events:  make(map[string]chan *event.StatusEvent),
-	}, nil
+
+		ctx:    ctx,
+		cancel: cancel,
+	}
+
+	c.active.Store(true)
+	return c, nil
 }
 
 func (c *Client) Archive(ctx context.Context, ev *event.SubmitEvent, reason string) error {
-	return nil
+	if !c.active.Load() {
+		return fmt.Errorf("client has already been closed")
+	}
+
+	return errors.New("not implemented")
 }
 
 func (c *Client) Submit(ctx context.Context, ev event.SubmitEvent) (chan *event.StatusEvent, error) {
+	if !c.active.Load() {
+		return nil, fmt.Errorf("client has already been closed")
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+
+	go func() {
+		select {
+		case <-c.ctx.Done():
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
 	if ev.ID == "" {
-		ev.ID = event.UUIDv7()
+		id := event.UUIDv7()
+		c.logger.Debug("ID not set; Creating new uuidv7: %s", id)
+		ev.ID = id
 	}
 
 	writer, err := c.session.GetWriter("events.submit")
@@ -88,53 +126,46 @@ func (c *Client) Submit(ctx context.Context, ev event.SubmitEvent) (chan *event.
 	}
 
 	c.mutex.Lock()
-	channel := make(chan *event.StatusEvent, 100)
-	c.events[ev.ID] = channel
+	ch := make(chan *event.StatusEvent, 100)
+	c.events[ev.ID] = ch
 	c.mutex.Unlock()
 
-	go func() {
-		defer func() {
-			c.mutex.Lock()
-			delete(c.events, ev.ID)
-			close(channel)
-			c.mutex.Unlock()
-		}()
+	c.wait.Add(1)
 
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				evs := &event.StatusEvent{}
-				if err := reader.ReadEvent(ctx, evs); err != nil {
-					if ctx.Err() != nil {
-						return
-					}
+	go c.processEvent(ctx, ev.ID, reader, ch)
 
-					time.Sleep(time.Second * 2)
-					continue
-				}
-
-				if evs.ID == ev.ID {
-					channel <- evs
-					if evs.Status.IsTerminal() {
-						return
-					}
-				}
-			}
-		}
-	}()
-
-	return channel, nil
+	return ch, nil
 }
 
 func (c *Client) Close() error {
+	if !c.active.CompareAndSwap(true, false) {
+		return fmt.Errorf("client has already been closed")
+	}
+
+	c.logger.Info("Closing client connections...")
+
+	c.cancel()
+
+	done := make(chan struct{})
+	go func() {
+		c.wait.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Goroutines completed cleanly
+	case <-time.After(c.options.ShutdownTimeout):
+		c.logger.Warn("Shutdown timed out; Some goroutines may still be running...")
+	}
+
 	c.mutex.Lock()
-	for _, channel := range c.events {
+	for id, channel := range c.events {
+		c.logger.Debug("Closing channel for task '%s'", id)
 		close(channel)
 	}
 	c.events = make(map[string]chan *event.StatusEvent)
 	c.mutex.Unlock()
 
-	return c.client.Cleanup()
+	return c.session.Client().Cleanup()
 }

@@ -2,6 +2,8 @@ package options
 
 import (
 	"time"
+
+	"github.com/mwantia/asynk/pkg/log"
 )
 
 const (
@@ -25,6 +27,7 @@ const (
 )
 
 type ClientOptions struct {
+	Logger          *log.LogBase  `json:"-"`
 	Brokers         []string      `json:"brokers,omitempty"`
 	Network         string        `json:"network,omitempty"`
 	GroupID         string        `json:"group_id,omitempty"`
@@ -67,6 +70,13 @@ func DefaultClientOptions() ClientOptions {
 }
 
 type ClientOption func(*ClientOptions) error
+
+func WithLogger(logger *log.LogBase) ClientOption {
+	return func(o *ClientOptions) error {
+		o.Logger = logger
+		return nil
+	}
+}
 
 func WithBrokers(brokers ...string) ClientOption {
 	return func(o *ClientOptions) error {
