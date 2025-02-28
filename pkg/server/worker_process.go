@@ -64,10 +64,7 @@ func (w *Worker) Process(ctx context.Context, handler Handler) error {
 		return fmt.Errorf("failed to initialize topics: %w", err)
 	}
 
-	reader, err := w.session.GetReader("events.submit")
-	if err != nil {
-		return fmt.Errorf("failed to get kafka reader: %w", err)
-	}
+	reader := w.session.GetReader("events.submit")
 
 	w.running.Add(1)
 	defer w.running.Done()

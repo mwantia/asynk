@@ -10,8 +10,9 @@ import (
 )
 
 type Reader struct {
-	reader *kafka.Reader
-	logger log.LogWrapper
+	session *Session
+	logger  log.LogWrapper
+	reader  *kafka.Reader
 }
 
 func (r *Reader) ReadEvent(ctx context.Context, ev event.Event) error {

@@ -12,10 +12,12 @@ import (
 )
 
 type Session struct {
+	ID     string
+	Suffix string
+
 	mutex  sync.RWMutex
 	client *Client
 	logger log.LogWrapper
-	suffix string
 
 	readers  map[string]*Reader
 	writers  map[string]*Writer
@@ -60,16 +62,17 @@ func (s *Session) CreateTopic(ctx context.Context, topic string, opts ...options
 	return conn.CreateTopics(config)
 }
 
-func (s *Session) GetReader(suffix string) (*Reader, error) {
+func (s *Session) GetReader(suffix string) *Reader {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	if reader, exist := s.readers[suffix]; exist {
 		s.logger.Debug("Returning existing reader for suffix '%s'", suffix)
-		return reader, nil
+		return reader
 	}
 
 	reader := &Reader{
+		session: s,
 		reader: kafka.NewReader(kafka.ReaderConfig{
 			Brokers:          s.client.options.Brokers,
 			Topic:            s.fullTopic(suffix),
@@ -88,19 +91,20 @@ func (s *Session) GetReader(suffix string) (*Reader, error) {
 	s.readers[suffix] = reader
 	s.client.cleanups = append(s.cleanups, reader.reader.Close)
 
-	return reader, nil
+	return reader
 }
 
-func (s *Session) GetWriter(suffix string) (*Writer, error) {
+func (s *Session) GetWriter(suffix string) *Writer {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	if writer, exist := s.writers[suffix]; exist {
 		s.logger.Debug("Returning existing writer for suffix '%s'", suffix)
-		return writer, nil
+		return writer
 	}
 
 	writer := &Writer{
+		session: s,
 		writer: &kafka.Writer{
 			Addr:         kafka.TCP(s.client.options.Brokers...),
 			Topic:        s.fullTopic(suffix),
@@ -118,7 +122,7 @@ func (s *Session) GetWriter(suffix string) (*Writer, error) {
 	s.writers[suffix] = writer
 	s.client.cleanups = append(s.cleanups, writer.writer.Close)
 
-	return writer, nil
+	return writer
 }
 
 func (s *Session) fullTopic(suffix string) string {
@@ -130,7 +134,7 @@ func (s *Session) fullTopic(suffix string) string {
 		text.WriteString(s.client.options.Pool + ".")
 	}
 
-	text.WriteString(s.suffix)
+	text.WriteString(s.Suffix)
 	if suffix != "" {
 		text.WriteString("." + suffix)
 	}

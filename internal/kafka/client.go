@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/mwantia/asynk/pkg/event"
 	"github.com/mwantia/asynk/pkg/log"
 	"github.com/mwantia/asynk/pkg/options"
 	"github.com/segmentio/kafka-go"
@@ -34,7 +35,8 @@ func (c *Client) Session(suffix string) (*Session, error) {
 	c.logger.Info("Creating new session with suffix '%s'", suffix)
 
 	return &Session{
-		suffix:   suffix,
+		ID:       event.UUIDv7(),
+		Suffix:   suffix,
 		client:   c,
 		logger:   c.logger.Named("kafka/session"),
 		readers:  make(map[string]*Reader),

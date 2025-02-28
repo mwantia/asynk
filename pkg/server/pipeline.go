@@ -21,11 +21,7 @@ func (p *Pipeline) Submit() *event.SubmitEvent {
 func (p *Pipeline) Status(ctx context.Context, ev *event.StatusEvent) error {
 	p.logger.Debug("Updating status for task '%s' to '%s'", p.submit.ID, ev.Status)
 
-	writer, err := p.session.GetWriter("events.status")
-	if err != nil {
-		p.logger.Error("Failed to get status writer: %v", err)
-		return err
-	}
+	writer := p.session.GetWriter("events.status")
 
 	if ev.ID == "" {
 		ev.ID = p.submit.ID
