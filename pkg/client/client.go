@@ -107,25 +107,25 @@ func (c *Client) Submit(ctx context.Context, ev event.SubmitEvent) (chan *event.
 		}
 	}()
 
+	if ev.Time.IsZero() {
+		now := time.Now()
+		c.logger.Debug("Time not set; Setting time with '%v'", now)
+		ev.Time = now
+	}
+
 	if ev.ID == "" {
 		id := event.UUIDv7()
-		c.logger.Debug("ID not set; Creating new uuidv7: %s", id)
+		c.logger.Debug("ID not set; Creating new uuidv7 '%s'", id)
 		ev.ID = id
 	}
 
-	writer, err := c.session.GetWriter("events.submit")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create kafka writer: %w", err)
-	}
+	writer := c.session.GetWriter("events.submit")
 
 	if err := writer.WriteEvent(ctx, &ev); err != nil {
 		return nil, fmt.Errorf("failed to write kafka message: %w", err)
 	}
 
-	reader, err := c.session.GetReader("events.status")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create kafka reader: %w", err)
-	}
+	reader := c.session.GetReader("events.status")
 
 	c.logger.Debug("Creating status channel for task '%s'", ev.ID)
 

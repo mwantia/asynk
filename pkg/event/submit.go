@@ -1,6 +1,9 @@
 package event
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 type EventType string
 
@@ -14,6 +17,7 @@ func (s EventType) String() string {
 
 type SubmitEvent struct {
 	ID       string          `json:"id"`
+	Time     time.Time       `json:"time,omitempty"`
 	Type     EventType       `json:"type,omitempty"`
 	Payload  json.RawMessage `json:"payload,omitempty"`
 	Metadata Metadata        `json:"metadata,omitempty"`

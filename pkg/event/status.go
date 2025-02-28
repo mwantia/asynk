@@ -1,6 +1,9 @@
 package event
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 type Status string
 
@@ -24,6 +27,7 @@ func (s Status) IsTerminal() bool {
 
 type StatusEvent struct {
 	ID       string          `json:"id"`
+	Time     time.Time       `json:"time,omitempty"`
 	Status   Status          `json:"status"`
 	Payload  json.RawMessage `json:"payload,omitempty"`
 	Metadata Metadata        `json:"metadata,omitempty"`

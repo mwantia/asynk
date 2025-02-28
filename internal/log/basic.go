@@ -20,7 +20,7 @@ func NewBasic(lvl string) log.LogWrapper {
 }
 
 func (l *BasicLogger) Log(level log.LogLevel, msg string, name string, args ...interface{}) {
-	if l.Level < level {
+	if level < l.Level {
 		return
 	}
 
@@ -32,7 +32,7 @@ func (l *BasicLogger) Log(level log.LogLevel, msg string, name string, args ...i
 	}
 
 	formattedMsg := fmt.Sprintf(msg, args...)
-	fmt.Fprintf(os.Stdout, "%s%s %s%s\n", Color(level), prefix, formattedMsg, ColorReset)
+	fmt.Fprintf(os.Stdout, "%s%s %s\033[0m\n", Color(level), prefix, formattedMsg)
 
 	if level == log.Fatal {
 		os.Exit(1)
